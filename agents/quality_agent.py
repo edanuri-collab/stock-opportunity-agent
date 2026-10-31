@@ -9,6 +9,7 @@ class QualityAgent(BaseAgent):
     description = "Growth, free cash flow and a strong balance sheet."
     weights = {"quality": 0.55, "value": 0.20, "catalyst": 0.15, "momentum": 0.10}
     risk_penalty = 0.35
+    family = "quality"
 
     def key_facts(self, stock: StockSnapshot) -> str:
         return (

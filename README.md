@@ -62,6 +62,37 @@ unit-tested) -> `dashboard/views/*` (layout only) -> `app.py` (settings, caching
 (top-N, equal weight, same metrics), so a strategy that cannot beat it shows no edge. It is never
 counted as a recommendation, and its "opportunity score" is hidden on the leaderboard.
 
+## Adding agents without code (strategy specs)
+
+Besides the core Python agents, every `*.toml` file in `agents/library/` (shipped strategies) and
+`agents/custom/` (your own, e.g. saved from the dashboard's **Agent Builder**) becomes an agent.
+A spec has optional `[[filters]]` (all must pass at time T, otherwise the stock cannot be picked)
+and exactly one scoring method: `[weights]` over the shared factors, or `[[rank]]` (cross-sectional
+percentile of data fields among the stocks that passed). Fields are listed in `agents/spec.py`.
+
+```toml
+name = "Low Volatility"
+family = "low_risk"            # value | quality | momentum | growth | low_risk | event | ...
+origin = "known"               # known (published strategy) | original (new idea)
+description = "..."
+reference = "Ang, Hodrick, Xing & Zhang (2006)"
+risk_penalty = 0.0
+
+[[filters]]                    # optional, repeatable
+field = "market_cap"
+op = ">="
+value = 1000000000.0
+
+[[rank]]                       # or: [weights] value = 0.6 / quality = 0.4
+field = "volatility"
+prefer = "low"
+weight = 1.0
+```
+
+A broken file is reported in the dashboard and skipped; it never stops the other agents. Spec
+agents get the same look-ahead tests as the core agents (`tests/test_agent_library.py`). If fewer
+than N stocks pass an agent's filters it holds fewer picks, and none means cash for that month.
+
 ## Synthetic data: signal is separate from outcome
 
 Each month, features at time T are noisy observations of hidden state and of the price path up to T.

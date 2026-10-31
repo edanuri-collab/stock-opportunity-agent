@@ -7,7 +7,7 @@ from agents import default_agents
 from engine.scoring import validate_weights
 
 KEYS = {"ticker", "agent", "value_score", "catalyst_score", "momentum_score", "risk_score",
-        "opportunity_score", "reasoning", "timestamp"}
+        "opportunity_score", "reasoning", "timestamp", "eligible"}
 
 
 def test_nine_agents_with_unique_names(agents):

@@ -29,11 +29,15 @@ def code_version() -> str:
 def agent_version(agent: BaseAgent) -> str:
     """Hash of the agent's configuration plus the shared scoring code it runs on."""
     digest = hashlib.sha256()
+    spec = agent.spec_dict() if hasattr(agent, "spec_dict") else None
     digest.update(json.dumps({
         "name": agent.name,
         "weights": dict(agent.weights),
         "risk_penalty": agent.risk_penalty,
+        **({"spec": spec} if spec else {}),  # filters / ranking of spec-defined agents
     }, sort_keys=True).encode())
-    digest.update(_hash_files([ROOT / "engine" / "scoring.py",
-                               ROOT / "agents" / "base_agent.py"]).encode())
+    files = [ROOT / "engine" / "scoring.py", ROOT / "agents" / "base_agent.py"]
+    if spec:
+        files += [ROOT / "agents" / "configurable.py", ROOT / "agents" / "spec.py"]
+    digest.update(_hash_files(files).encode())
     return digest.hexdigest()[:8]

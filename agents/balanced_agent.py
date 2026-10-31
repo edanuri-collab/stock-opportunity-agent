@@ -8,3 +8,4 @@ class BalancedAgent(BaseAgent):
     description = "Equal weight across value, quality, momentum and catalyst."
     weights = {"value": 0.25, "quality": 0.25, "momentum": 0.25, "catalyst": 0.25}
     risk_penalty = 0.30
+    family = "multi_factor"

@@ -48,7 +48,8 @@ def decide(
     """Every agent analyses the SAME snapshots. Receives no outcome data by construction."""
     decisions: Dict[str, List[AgentResult]] = {}
     for agent in agents:
-        results = [agent.analyze(s) for s in snapshots]
+        universe = getattr(agent, "analyze_universe", None)  # cross-sectional agents
+        results = list(universe(snapshots)) if universe else [agent.analyze(s) for s in snapshots]
         results.sort(key=lambda r: (-r["opportunity_score"], r["ticker"]))
         decisions[agent.name] = results
     return decisions
@@ -72,11 +73,12 @@ def run_backtest(
         result.regimes.append(dataset.regime_at(ts))
         for name, ranked in decisions.items():  # 2) only now realise outcomes
             result.scores.extend(ranked)
-            picks = ranked[:top_n]
+            picks = [r for r in ranked if r.get("eligible", True)][:top_n]
             returns = [dataset.outcome(r["ticker"], ts) for r in picks]
             for r, ret in zip(picks, returns):
                 result.trades.append(Trade(ts, name, r["ticker"], r["opportunity_score"], ret))
-            result.period_returns[name].append(sum(returns) / len(returns))
+            # nothing passed the agent's filters -> stays in cash for the period
+            result.period_returns[name].append(sum(returns) / len(returns) if returns else 0.0)
     result.period_ends = [
         result.timestamps[i + 1] if i + 1 < len(result.timestamps) else _next_month_end(ts)
         for i, ts in enumerate(result.timestamps)

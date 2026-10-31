@@ -1,0 +1,35 @@
+name = "Graham Defensive"
+family = "value"
+origin = "known"
+description = "גרסה מקורבת לכללי 'המשקיע הדפנסיבי' של בנג'מין גרהם: חברה רווחית, לא יקרה, עם חוב נמוך, תזרים חיובי וגודל משמעותי. בין העוברות - העדפה לערך ואיכות. יורחב בשלב 2 (P/B, דיבידנד)."
+reference = "Benjamin Graham, The Intelligent Investor (1949)"
+risk_penalty = 0.1
+
+[[filters]]
+field = "pe_ratio"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "pe_ratio"
+op = "<="
+value = 15.0
+
+[[filters]]
+field = "debt_to_equity"
+op = "<="
+value = 0.6
+
+[[filters]]
+field = "fcf_yield"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "market_cap"
+op = ">="
+value = 2000000000.0
+
+[weights]
+value = 0.6
+quality = 0.4

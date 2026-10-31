@@ -1,0 +1,21 @@
+name = "Quiet Momentum"
+family = "momentum"
+origin = "original"
+description = "רעיון חדש: עלייה 'שקטה' עדיפה על עלייה תזזיתית. בוחר מניות במגמה חיובית ומדרג לפי מומנטום גבוה ותנודתיות נמוכה, בדומה למומנטום מותאם תנודתיות."
+reference = "Inspired by risk-managed momentum (Barroso & Santa-Clara, 2015)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "momentum"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "momentum"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "volatility"
+prefer = "low"
+weight = 1.0

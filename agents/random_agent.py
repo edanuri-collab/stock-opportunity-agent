@@ -15,6 +15,7 @@ class RandomAgent(BaseAgent):
     description = "Control. Picks pseudo-randomly (deterministic hash), ignores all data."
     weights = {"noise": 1.0}
     risk_penalty = 0.0
+    family = "control"
 
     def key_facts(self, stock: StockSnapshot) -> str:
         return "none - placebo pick, features are ignored"

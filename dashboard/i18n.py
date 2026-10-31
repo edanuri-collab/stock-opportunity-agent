@@ -15,6 +15,7 @@ from engine.benchmarks import BUY_HOLD, MARKET, RANDOM
 PAGES = {
     "Overview": "סקירה כללית",
     "Agents Leaderboard": "דירוג סוכנים",
+    "Agent Catalog": "קטלוג ובונה סוכנים",
     "Stock Opportunities": "הזדמנויות במניות",
     "Stock Detail": "פרטי מניה",
     "Performance & Backtesting": "ביצועים ובקטסט",
@@ -23,7 +24,7 @@ PAGES = {
 
 COLUMNS = {
     # leaderboard / metrics
-    "Rank": "דירוג", "Agent": "סוכן", "Type": "סוג", "Status": "סטטוס",
+    "Rank": "דירוג", "Agent": "סוכן", "Type": "סוג", "Status": "סטטוס", "Family": "משפחה",
     "Opportunity Score": "ציון הזדמנות", "Alpha": "אלפא", "Alpha t-stat": "t-stat אלפא",
     "Win Rate": "אחוז הצלחה", "Sharpe": "שארפ", "Max Drawdown": "ירידה מקסימלית",
     "Trades": "עסקאות", "Total Return": "תשואה כוללת", "Beats Random": "עוקף תיקים אקראיים",
@@ -104,3 +105,50 @@ def frame(df: pd.DataFrame, value_columns: Iterable[str] = ()) -> pd.DataFrame:
 
 def values(items: Iterable[str]) -> List[str]:
     return [v(i) for i in items]
+
+
+# ---- agent catalog & builder ----------------------------------------------------------------
+
+FAMILIES = {
+    "value": "ערך", "quality": "איכות", "momentum": "מומנטום", "growth": "צמיחה",
+    "low_risk": "סיכון נמוך", "event": "אירועים", "contrarian": "קונטרריאני",
+    "size": "גודל", "multi_factor": "רב-גורמי", "control": "ביקורת",
+}
+ORIGINS = {"core": "ליבה (קוד)", "known": "אסטרטגיה מוכרת", "original": "רעיון מקורי"}
+SOURCES = {"core": "מובנה", "library": "ספרייה", "custom": "הסוכנים שלי"}
+METHODS = {"weights": "שקלול גורמים", "rank": "דירוג לפי נתונים"}
+PREFER = {"high": "גבוה עדיף", "low": "נמוך עדיף"}
+OPS = {"<": "<", "<=": "≤", ">": ">", ">=": "≥"}
+
+FIELDS = {
+    "market_cap": "שווי שוק", "pe_ratio": "מכפיל רווח (P/E)",
+    "earnings_yield": "תשואת רווח (1/PE)", "price_to_sales": "מכפיל מכירות (P/S)",
+    "fcf_yield": "תשואת תזרים חופשי", "revenue_growth": "צמיחה בהכנסות",
+    "earnings_growth": "צמיחה ברווח", "debt_to_equity": "חוב להון",
+    "momentum": "מומנטום 6 חודשים", "relative_strength": "חוזק יחסי",
+    "distance_from_high": "מרחק משיא 52 שבועות", "volume_ratio": "יחס מחזור מסחר",
+    "volatility": "תנודתיות", "catalyst_score": "ציון קטליזטור",
+    "sentiment_score": "ציון סנטימנט", "short_interest": "שורט מהמניות הצפות",
+    "days_to_cover": "ימים לכיסוי שורט",
+    **{f"factor_{k}": f"גורם {v}" for k, v in FACTORS.items() if k != "noise"},
+}
+# how a field's value is typed in the builder: raw value = typed value x factor
+UNIT_HINT = {"pct": ("%", 0.01), "money": ("מיליארד $", 1e9), "ratio": ("", 1.0),
+             "score": ("0-100", 1.0)}
+
+# Hebrew descriptions of the core (Python) agents; spec agents carry their own text.
+CORE_DESCRIPTIONS = {
+    "Value Hunter": "מחפש מניות זולות ביחס לרווח, למכירות ולתזרים המזומנים החופשי.",
+    "Momentum Hunter": "מחפש מניות במגמת עלייה חזקה עם חוזק יחסי גבוה.",
+    "Catalyst Hunter": "מחפש אירועים שעשויים להזיז את המניה: קטליזטורים וסנטימנט חיובי.",
+    "Quality Hunter": "מחפש חברות איכותיות: צמיחה, תזרים חופשי ומאזן חזק.",
+    "Contrarian": "מחפש מניות שירדו חדות בזמן שהנתונים העסקיים שלהן נשארו חזקים.",
+    "Breakout Hunter": "מחפש מניות קרובות לשיא 52 שבועות עם מחזור מסחר גבוה ומומנטום.",
+    "Short Squeeze Hunter": "מחפש מניות עם שורט גבוה, מחזור מסחר עולה ומומנטום (סקוויז).",
+    "Balanced": "משקל שווה לערך, איכות, מומנטום וקטליזטור.",
+    "Random Agent": "סוכן ביקורת: בוחר באקראי (באופן דטרמיניסטי) ומתעלם מכל הנתונים.",
+}
+
+
+def description(agent) -> str:
+    return CORE_DESCRIPTIONS.get(agent.name, agent.description)

@@ -1,0 +1,26 @@
+name = "Magic Formula"
+family = "value"
+origin = "known"
+description = "הנוסחה הקסומה של ג'ואל גרינבלט: דירוג משולב של תשואת רווח (זול) ותשואה על ההון (איכותי). כרגע תשואת התזרים החופשי משמשת כקירוב ל-ROC, עד שיתווסף בשלב 2."
+reference = "Joel Greenblatt, The Little Book That Beats the Market (2005)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "market_cap"
+op = ">="
+value = 1000000000.0
+
+[[filters]]
+field = "pe_ratio"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "earnings_yield"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "fcf_yield"
+prefer = "high"
+weight = 1.0

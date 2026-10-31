@@ -42,3 +42,20 @@ def test_opportunity_filters_do_not_crash(small_env):
     at.toggle(key="opp_picked").set_value(True).run()
     at.selectbox(key="opp_sort").set_value("Risk Score").run()
     assert not at.exception
+
+
+def test_agent_builder_previews_and_saves(small_env, tmp_path, monkeypatch):
+    import dashboard.views.catalog as catalog
+
+    monkeypatch.setattr(catalog, "CUSTOM_DIR", tmp_path / "custom")
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    at.sidebar.radio(key="page").set_value("Agent Catalog").run()
+    assert not at.exception
+    at.text_input(key="b_0_name").set_value("Smoke Agent").run()
+    at.text_area(key="b_0_desc").set_value("test strategy").run()
+    at.slider(key="b_0_w_value").set_value(60).run()
+    assert not at.exception
+    assert not [w for w in at.warning if "לא תקין" in w.value]
+    at.button(key="b_0_save").click().run()
+    assert not at.exception
+    assert (tmp_path / "custom" / "smoke-agent.toml").exists()

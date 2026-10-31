@@ -9,6 +9,7 @@ class BreakoutAgent(BaseAgent):
     description = "Momentum plus volume near a 52-week high."
     weights = {"breakout": 0.50, "momentum": 0.25, "catalyst": 0.15, "quality": 0.10}
     risk_penalty = 0.20
+    family = "momentum"
 
     def key_facts(self, stock: StockSnapshot) -> str:
         return (

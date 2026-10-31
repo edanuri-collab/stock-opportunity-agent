@@ -70,6 +70,7 @@ class Experiment:
     backtest: Optional[BacktestResult] = field(default=None, repr=False, compare=False)
     benchmarks: Optional[BenchmarkSet] = field(default=None, repr=False, compare=False)
     metrics: List[AgentMetrics] = field(default_factory=list, repr=False, compare=False)
+    agents: List[BaseAgent] = field(default_factory=list, repr=False, compare=False)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -143,6 +144,7 @@ def run_experiment(
         parameters=param_dict,
         results=results,
         dataset=dataset, backtest=backtest, benchmarks=benchmarks, metrics=metrics,
+        agents=agents,
     )
 
 

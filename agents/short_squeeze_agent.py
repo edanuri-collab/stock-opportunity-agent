@@ -9,6 +9,7 @@ class ShortSqueezeAgent(BaseAgent):
     description = "High short interest combined with volume and momentum."
     weights = {"squeeze": 0.55, "momentum": 0.20, "catalyst": 0.20, "value": 0.05}
     risk_penalty = 0.10
+    family = "event"
 
     def key_facts(self, stock: StockSnapshot) -> str:
         return (

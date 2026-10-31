@@ -1,0 +1,11 @@
+name = "Low Volatility"
+family = "low_risk"
+origin = "known"
+description = "אנומליית התנודתיות הנמוכה: מניות רגועות השיגו לאורך זמן תשואה מותאמת סיכון טובה מהצפוי. בוחר את המניות עם התנודתיות הנמוכה ביותר."
+reference = "Ang, Hodrick, Xing & Zhang (2006); Baker, Bradley & Wurgler (2011)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "volatility"
+prefer = "low"
+weight = 1.0

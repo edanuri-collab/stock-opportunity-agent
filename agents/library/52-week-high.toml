@@ -1,0 +1,16 @@
+name = "52-Week High"
+family = "momentum"
+origin = "known"
+description = "מומנטום לפי קרבה לשיא 52 השבועות: מניות שנסחרות קרוב לשיא נוטות להמשיך, כי משקיעים מהססים לקנות 'ביוקר'. משולב עם חוזק יחסי."
+reference = "George & Hwang, The 52-Week High and Momentum Investing (2004)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "distance_from_high"
+prefer = "low"
+weight = 2.0
+
+[[rank]]
+field = "relative_strength"
+prefer = "high"
+weight = 1.0

@@ -112,7 +112,9 @@ def test_financial_metrics_and_factor_profile(dataset):
 def test_hebrew_reasoning_uses_agent_drivers(experiment):
     ts = experiment.dataset.timestamps[1]
     s = experiment.dataset.snapshots_at(ts)[0]
-    text = an.reasoning_he("Value Hunter", s, 61.2).replace("⁦", "").replace("⁩", "")
+    value = next(a for a in experiment.agents if a.name == "Value Hunter")
+    text = an.reasoning_he("Value Hunter", s, 61.2, value)
+    text = text.replace("⁦", "").replace("⁩", "")
     assert text.startswith(f"Value Hunter נותן ל-{s.ticker} ציון 61.2/100")
     assert "גורמים מובילים" in text and "סיכון" in text
     assert "פלסבו" in an.reasoning_he("Random Agent", s, 50.0)
@@ -158,3 +160,31 @@ def test_history_frame(experiment):
                                         (900, "$900")])
 def test_format_money(x, expected):
     assert an.format_money(x) == expected
+
+
+def test_catalog_rules_and_preview(experiment):
+    from agents.configurable import build_agent
+    from agents.registry import load_registry
+    from agents.spec import AgentSpec
+
+    reg = load_registry()
+    cat = an.catalog_frame(experiment, reg)
+    assert len(cat) == len(reg.agents)
+    assert set(cat["Source"]) == {"core", "library"}
+    assert set(cat["Method"]) == {"weights", "rank"}
+
+    spec = AgentSpec.from_dict({
+        "name": "Preview Test", "family": "value", "description": "x", "risk_penalty": 0.2,
+        "filters": [{"field": "pe_ratio", "op": ">", "value": 0}],
+        "rank": [{"field": "volatility", "prefer": "low"}]})
+    lines = an.rules_he(spec)
+    assert lines[0].startswith("תנאי סינון") and lines[1].startswith("דירוג")
+    assert lines[-1].startswith("קנס סיכון")
+    prev = an.preview_agent(experiment, build_agent(spec))
+    assert prev["metrics"].num_trades > 0 and len(prev["picks"]) <= 10
+    assert 0 < prev["eligible_latest"] <= prev["universe"]
+
+    s = experiment.dataset.snapshots_at(experiment.dataset.timestamps[0])[0]
+    loss = replace(s, pe_ratio=-2.0)
+    assert "לא עומדת בתנאי" in an.reasoning_spec_he(spec, loss, 0.0, False)
+    assert "דירוג לפי" in an.reasoning_spec_he(spec, s, 70.0, True)

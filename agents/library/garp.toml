@@ -1,0 +1,26 @@
+name = "GARP"
+family = "growth"
+origin = "known"
+description = "צמיחה במחיר סביר בסגנון פיטר לינץ' (רעיון יחס ה-PEG): חברות רווחיות שהרווח שלהן צומח, מדורגות לפי צמיחה גבוהה ומכפיל נמוך."
+reference = "Peter Lynch, One Up on Wall Street (1989)"
+risk_penalty = 0.1
+
+[[filters]]
+field = "pe_ratio"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "earnings_growth"
+op = ">="
+value = 0.05
+
+[[rank]]
+field = "earnings_growth"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "pe_ratio"
+prefer = "low"
+weight = 1.0

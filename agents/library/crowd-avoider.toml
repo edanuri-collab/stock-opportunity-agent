@@ -1,0 +1,16 @@
+name = "Crowd Avoider"
+family = "momentum"
+origin = "original"
+description = "רעיון חדש: מומנטום חיובי במניות שמעט משקיעים מהמרים נגדן (שורט נמוך). הרעיון הוא להימנע ממניות 'צפופות' שבהן התנועה עלולה להתהפך בחדות."
+reference = ""
+risk_penalty = 0.15
+
+[[filters]]
+field = "short_interest"
+op = "<="
+value = 0.08
+
+[weights]
+momentum = 0.6
+quality = 0.25
+catalyst = 0.15

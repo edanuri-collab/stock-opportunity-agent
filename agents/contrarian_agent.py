@@ -9,6 +9,7 @@ class ContrarianAgent(BaseAgent):
     description = "Sharp drawdown while fundamentals remain strong."
     weights = {"contrarian": 0.65, "value": 0.20, "catalyst": 0.15}
     risk_penalty = 0.15
+    family = "contrarian"
 
     def key_facts(self, stock: StockSnapshot) -> str:
         return (

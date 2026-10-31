@@ -10,12 +10,14 @@ import time
 
 import streamlit as st
 
+from agents.registry import fingerprint, load_registry
 from config import Settings
 from dashboard import i18n as he
 from dashboard import theme
 from dashboard.context import PAGES, DashboardContext, build_context
 from dashboard.views import (
-    experiments, fmt_date, leaderboard, opportunities, overview, performance, stock_detail,
+    catalog, experiments, fmt_date, leaderboard, opportunities, overview, performance,
+    stock_detail,
 )
 from data.sample_data import SignalConfig
 from engine.evaluation import RANK_KEYS
@@ -26,11 +28,12 @@ st.set_page_config(page_title="Stock Opportunity Agent | מחקר מניות",
 theme.inject_css()
 
 VIEWS = {
-    "Overview": overview, "Agents Leaderboard": leaderboard,
+    "Overview": overview, "Agents Leaderboard": leaderboard, "Agent Catalog": catalog,
     "Stock Opportunities": opportunities, "Stock Detail": stock_detail,
     "Performance & Backtesting": performance, "Experiments": experiments,
 }
 ICONS = {"Overview": ":material/dashboard:", "Agents Leaderboard": ":material/leaderboard:",
+         "Agent Catalog": ":material/smart_toy:",
          "Stock Opportunities": ":material/manage_search:",
          "Stock Detail": ":material/query_stats:",
          "Performance & Backtesting": ":material/show_chart:",
@@ -38,14 +41,17 @@ ICONS = {"Overview": ":material/dashboard:", "Agents Leaderboard": ":material/le
 
 
 @st.cache_resource(show_spinner="מריץ ניסוי...")
-def load(params: ExperimentParams, experiment_dir: str) -> DashboardContext:
+def load(params: ExperimentParams, experiment_dir: str, agents_version: str) -> DashboardContext:
+    """``agents_version`` (spec files fingerprint) is part of the cache key: adding or editing
+    an agent file reruns the experiment."""
     started = time.perf_counter()
-    exp = run_experiment(params)
+    registry = load_registry()
+    exp = run_experiment(params, agents=registry.agents)
     try:
         exp.save(experiment_dir)  # experiment history; the UI keeps working if this fails
     except OSError:
         pass
-    return build_context(exp, experiment_dir, time.perf_counter() - started)
+    return build_context(exp, experiment_dir, registry, time.perf_counter() - started)
 
 
 defaults = Settings.from_env()
@@ -77,7 +83,7 @@ params = ExperimentParams(
     random_trials=int(trials), rank_by=rank_by,
     signal=SignalConfig.null() if mode == "null" else SignalConfig(),
 )
-ctx = load(params, defaults.experiment_dir)
+ctx = load(params, defaults.experiment_dir, fingerprint())
 
 with st.sidebar:
     status = ctx.status

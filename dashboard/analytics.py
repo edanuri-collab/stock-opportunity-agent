@@ -12,8 +12,13 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 
-from agents import default_agents
+from agents.base_agent import BaseAgent
+from agents.registry import Registry
+from agents.spec import FIELDS, AgentSpec, Filter, field_value
+from dashboard import i18n as he
 from dashboard.i18n import FACTORS as FACTOR_HE
+from engine.backtest import decide, run_backtest
+from engine.evaluation import compute_agent_metrics
 from data.models import StockSnapshot
 from engine.benchmarks import BUY_HOLD, MARKET, RANDOM
 from engine.experiment import Experiment
@@ -123,12 +128,14 @@ def overview_stats(exp: Experiment) -> Dict[str, Any]:
 # ---- leaderboard ---------------------------------------------------------------------------
 
 def agent_leaderboard(exp: Experiment) -> pd.DataFrame:
+    agents = _agent_map(exp)
     rows = []
     for rank, m in enumerate(exp.metrics, start=1):
         a = m.alpha[MARKET]
         control = is_control(m.agent)
         rows.append({
             "Rank": rank, "Agent": m.agent, "Type": "Control" if control else "Strategy",
+            "Family": getattr(agents.get(m.agent), "family", ""),
             "Status": performance_status(a.t_stat),
             # a placebo's "score" is hash noise, so it is not shown as an opportunity score
             "Opportunity Score": None if control else m.average_score,
@@ -236,12 +243,16 @@ def agent_views(exp: Experiment, ticker: str, timestamp: datetime,
     at = scores[scores["timestamp"] == timestamp.isoformat()].copy()
     at["rank"] = at.groupby("agent")["opportunity_score"].rank(ascending=False, method="min")
     mine = at[at["ticker"] == ticker]
-    top_n, universe = exp.parameters["top_n"], at["ticker"].nunique()
+    universe = at["ticker"].nunique()
     snap = snapshot_of(exp, ticker, timestamp)
+    held = {t.agent for t in exp.backtest.trades
+            if t.timestamp == timestamp and t.ticker == ticker}
+    agents = _agent_map(exp)
     rows = [{"Agent": r.agent, "Type": "Control" if is_control(r.agent) else "Strategy",
              "Opportunity Score": r.opportunity_score, "Rank": f"{int(r.rank)} / {universe}",
-             "Picked": int(r.rank) <= top_n,
-             "Reasoning": reasoning_he(r.agent, snap, r.opportunity_score)}
+             "Picked": r.agent in held,
+             "Reasoning": reasoning_he(r.agent, snap, r.opportunity_score,
+                                       agents.get(r.agent), r.eligible)}
             for r in mine.itertuples()]
     return pd.DataFrame(rows).sort_values(["Opportunity Score", "Agent"],
                                           ascending=[False, True]).reset_index(drop=True)
@@ -269,7 +280,8 @@ def risk_flags(s: StockSnapshot) -> List[str]:
     return flags
 
 
-_AGENTS = {a.name: a for a in default_agents()}
+def _agent_map(exp: Experiment) -> Dict[str, BaseAgent]:
+    return {a.name: a for a in exp.agents}
 
 def ltr(text: object) -> str:
     """Isolate a Latin/numeric fragment so it reads left-to-right inside Hebrew text."""
@@ -293,12 +305,14 @@ _FACTOR_FACTS = {
 }
 
 
-def reasoning_he(agent: str, s: StockSnapshot, score: float) -> str:
+def reasoning_he(agent: str, s: StockSnapshot, score: float,
+                 cfg: Optional[BaseAgent] = None, eligible: bool = True) -> str:
     """Hebrew explanation built from the same components and weights the agent used."""
+    if getattr(cfg, "spec", None) is not None:
+        return reasoning_spec_he(cfg.spec, s, score, eligible)
     if is_control(agent):
         return (f"בחירת פלסבו: הציון ({score:.1f}) נקבע מ-{ltr('hash')} של הטיקר והתאריך, "
                 "ומתעלם מכל נתוני המניה.")
-    cfg = _AGENTS.get(agent)
     if cfg is None:
         return f"{ltr(agent)} נותן ל-{ltr(s.ticker)} ציון {ltr(f'{score:.1f}/100')}."
     comps = compute_components(s)
@@ -402,3 +416,100 @@ def format_money(x: float) -> str:
         if abs(x) >= div:
             return f"${x / div:,.1f}{unit}"
     return f"${x:,.0f}"
+
+
+# ---- agent catalog & builder ---------------------------------------------------------------
+
+def format_field(name: str, value: float) -> str:
+    kind = FIELDS[name][0]
+    if kind == "pct":
+        return f"{value:.1%}"
+    if kind == "money":
+        return format_money(value)
+    if kind == "score":
+        return f"{value:.0f}"
+    return f"{value:.2f}"
+
+
+def filter_he(f: Filter) -> str:
+    return f"{he.FIELDS[f.field]} {ltr(f'{he.OPS[f.op]} {format_field(f.field, f.value)}')}"
+
+
+def rules_he(spec: AgentSpec) -> List[str]:
+    """The agent's rules as short Hebrew lines (for the catalog)."""
+    lines = [f"תנאי סינון: {filter_he(f)}" for f in spec.filters]
+    if spec.rank:
+        total = sum(r.weight for r in spec.rank)
+        lines += [f"דירוג: {he.FIELDS[r.field]}, {he.PREFER[r.prefer]} "
+                  f"(משקל {ltr(f'{r.weight / total:.0%}')})" for r in spec.rank]
+    else:
+        ordered = sorted(spec.weights, key=lambda kv: -kv[1])
+        lines.append("שקלול גורמים: " + ", ".join(f"{FACTOR_HE[k]} {ltr(f'{v:.0%}')}"
+                                                for k, v in ordered))
+    if spec.risk_penalty:
+        lines.append(f"קנס סיכון: {ltr(f'{spec.risk_penalty:.2f}')} מציון הסיכון")
+    return lines
+
+
+def reasoning_spec_he(spec: AgentSpec, s: StockSnapshot, score: float, eligible: bool) -> str:
+    who = ltr(spec.name)
+    if not eligible:
+        failed = [filter_he(f) for f in spec.filters if not f.passes(s)]
+        return f"{who} מסנן את {ltr(s.ticker)}: לא עומדת בתנאי " + "; ".join(failed) + "."
+    text = f"{who} נותן ל-{ltr(s.ticker)} ציון {ltr(f'{score:.1f}/100')}."
+    if spec.filters:
+        text += f" עוברת את כל {len(spec.filters)} תנאי הסינון."
+    if spec.rank:
+        text += " דירוג לפי: " + ", ".join(
+            f"{he.FIELDS[r.field]} {ltr(format_field(r.field, field_value(s, r.field)))} "
+            f"({he.PREFER[r.prefer]})" for r in spec.rank) + "."
+    else:
+        comps = compute_components(s)
+        cd = comps.as_dict()
+        drivers = top_factors(comps, spec.weights_map, 2)
+        text += " גורמים מובילים: " + ", ".join(f"{FACTOR_HE[f]} {cd[f]:.0f}"
+                                              for f in drivers) + "."
+    return text
+
+
+def method_of(agent: BaseAgent) -> str:
+    spec = getattr(agent, "spec", None)
+    return spec.method if spec is not None else "weights"
+
+
+def catalog_frame(exp: Experiment, registry: Registry) -> pd.DataFrame:
+    metrics = {m.agent: (rank, m) for rank, m in enumerate(exp.metrics, start=1)}
+    rows = []
+    for a in registry.agents:
+        rank, m = metrics.get(a.name, (None, None))
+        alpha = m.alpha[MARKET] if m else None
+        rows.append({
+            "Agent": a.name, "Family": a.family, "Origin": a.origin,
+            "Method": method_of(a), "Source": registry.sources.get(a.name, ""),
+            "Rank": rank, "Alpha": alpha.alpha if alpha else None,
+            "Alpha t-stat": alpha.t_stat if alpha else None,
+            "Trades": m.num_trades if m else None, "Description": a.description,
+        })
+    return pd.DataFrame(rows)
+
+
+def preview_agent(exp: Experiment, agent: BaseAgent) -> Dict[str, Any]:
+    """Backtest one (unsaved) agent on the experiment's data, against its benchmarks."""
+    top_n = exp.parameters["top_n"]
+    bt = run_backtest(exp.dataset, [agent], top_n)
+    m = compute_agent_metrics(bt, exp.benchmarks)[0]
+    latest = exp.dataset.timestamps[-1]
+    ranked = decide([agent], exp.dataset.snapshots_at(latest), top_n)[agent.name]
+    eligible = [r for r in ranked if r["eligible"]]
+    names = {s.ticker: s.company_name for s in exp.dataset.snapshots_at(latest)}
+    picks = pd.DataFrame([{"Ticker": r["ticker"], "Company": names[r["ticker"]],
+                           "Opportunity Score": r["opportunity_score"]}
+                          for r in eligible[:top_n]],
+                         columns=["Ticker", "Company", "Opportunity Score"])
+    control = next((x for x in exp.metrics if is_control(x.agent)), None)
+    return {
+        "metrics": m, "alpha": m.alpha[MARKET], "picks": picks,
+        "eligible_latest": len(eligible), "universe": len(ranked),
+        "avg_picks": m.num_trades / max(len(exp.dataset.timestamps), 1),
+        "random_agent_return": control.total_return if control else None,
+    }

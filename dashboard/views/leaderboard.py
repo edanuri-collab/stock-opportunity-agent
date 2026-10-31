@@ -22,7 +22,7 @@ def render(ctx: DashboardContext) -> None:
                 f"מדורג לפי {he.RANK_KEYS.get(exp.results['rank_by'])}. האלפא שנתית ומחושבת "
                 "מול פרוקסי השוק. סטטוס מובהק דורש ⁦|t| ≥ 2⁩.")
     df = an.agent_leaderboard(exp)
-    view = he.frame(df, ["Type", "Status"])
+    view = he.frame(df.assign(Family=df["Family"].map(he.FAMILIES)), ["Type", "Status"])
     c = he.col
     styled = (view.style
               .format({c("Opportunity Score"): "{:.1f}",

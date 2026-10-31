@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import ABC
 from types import MappingProxyType
-from typing import Any, ClassVar, Mapping, TypedDict
+from typing import Any, ClassVar, List, Mapping, Sequence, TypedDict
 
 from data.models import StockSnapshot
 from engine.scoring import (
@@ -26,6 +26,7 @@ class AgentResult(TypedDict):
     opportunity_score: float
     reasoning: str
     timestamp: str
+    eligible: bool          # False = filtered out by the agent's rules; never picked
 
 
 class BaseAgent(ABC):
@@ -35,6 +36,9 @@ class BaseAgent(ABC):
     description: ClassVar[str]
     weights: ClassVar[Mapping[str, float]]
     risk_penalty: ClassVar[float]
+    family: ClassVar[str] = "multi_factor"   # see agents.spec.FAMILIES
+    origin: ClassVar[str] = "core"           # core (Python) | known | original (specs)
+    reference: ClassVar[str] = ""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -64,7 +68,13 @@ class BaseAgent(ABC):
             "opportunity_score": round(opportunity, 2),
             "reasoning": self._reasoning(stock, comps, opportunity),
             "timestamp": stock.timestamp.isoformat(),
+            "eligible": True,
         }
+
+    def analyze_universe(self, stocks: Sequence[StockSnapshot]) -> List[AgentResult]:
+        """Score every stock of one timestamp. Agents that rank cross-sectionally override
+        this; it still only receives snapshots of that single timestamp."""
+        return [self.analyze(s) for s in stocks]
 
     def _reasoning(self, stock: StockSnapshot, comps: Components, opportunity: float) -> str:
         cd = comps.as_dict()
