@@ -1,7 +1,8 @@
 """Stock Opportunity Agent - research & backtesting lab (synthetic data, no trading).
 
 Layers: data/ + agents/ + engine/ produce an Experiment; dashboard/analytics.py turns it into
-frames; dashboard/views/ lay those out. This file only wires settings, caching and navigation.
+frames; dashboard/views/ lay those out (Hebrew UI, dashboard/i18n.py). This file only wires
+settings, caching and navigation.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import time
 import streamlit as st
 
 from config import Settings
+from dashboard import i18n as he
 from dashboard import theme
 from dashboard.context import PAGES, DashboardContext, build_context
 from dashboard.views import (
@@ -19,8 +21,8 @@ from data.sample_data import SignalConfig
 from engine.evaluation import RANK_KEYS
 from engine.experiment import ExperimentParams, run_experiment
 
-st.set_page_config(page_title="Stock Opportunity Agent", page_icon=":material/insights:",
-                   layout="wide")
+st.set_page_config(page_title="Stock Opportunity Agent | מחקר מניות",
+                   page_icon=":material/insights:", layout="wide")
 theme.inject_css()
 
 VIEWS = {
@@ -35,7 +37,7 @@ ICONS = {"Overview": ":material/dashboard:", "Agents Leaderboard": ":material/le
          "Experiments": ":material/science:"}
 
 
-@st.cache_resource(show_spinner="Running experiment...")
+@st.cache_resource(show_spinner="מריץ ניסוי...")
 def load(params: ExperimentParams, experiment_dir: str) -> DashboardContext:
     started = time.perf_counter()
     exp = run_experiment(params)
@@ -49,39 +51,43 @@ def load(params: ExperimentParams, experiment_dir: str) -> DashboardContext:
 defaults = Settings.from_env()
 with st.sidebar:
     st.markdown("### :material/insights: Stock Opportunity Agent")
-    st.caption("Quant research & backtesting lab")
-    page = st.radio("Navigate", PAGES, key="page", label_visibility="collapsed",
-                    format_func=lambda p: f"{ICONS[p]} {p}")
+    st.caption("מעבדת מחקר כמותי ובקטסט למניות")
+    page = st.radio("ניווט", PAGES, key="page", label_visibility="collapsed",
+                    format_func=lambda p: f"{ICONS[p]} {he.PAGES[p]}")
     st.divider()
-    with st.expander("Experiment settings", icon=":material/tune:"):
+    with st.expander("הגדרות ניסוי", icon=":material/tune:"):
         seed = st.number_input("Seed", value=defaults.seed, step=1)
-        n_stocks = st.number_input("Stocks", min_value=10, max_value=500,
+        n_stocks = st.number_input("מספר מניות", min_value=10, max_value=500,
                                    value=max(defaults.n_stocks, 10), step=10)
-        n_periods = st.number_input("Months", min_value=6, max_value=60,
+        n_periods = st.number_input("חודשים", min_value=6, max_value=60,
                                     value=max(defaults.n_periods, 6), step=1)
-        top_n = st.slider("Picks per agent (top N)", 1, 30, min(max(defaults.top_n, 1), 30))
-        trials = st.slider("Random-selection trials", 20, 1000,
+        top_n = st.slider("בחירות לכל סוכן (Top N)", 1, 30, min(max(defaults.top_n, 1), 30))
+        trials = st.slider("מספר תיקים אקראיים להשוואה", 20, 1000,
                            min(max(defaults.random_trials, 20), 1000))
-        rank_by = st.selectbox("Rank agents by", RANK_KEYS, index=0)
-        mode = st.radio("Synthetic signal", ["Weak signal (default)", "Null (no signal at all)"],
-                        help="Null = features carry no information about outcomes. "
-                             "Any alpha found there is pure luck.")
+        rank_by = st.selectbox("דירוג הסוכנים לפי", RANK_KEYS, index=0,
+                               format_func=lambda k: he.RANK_KEYS.get(k, k))
+        mode = st.radio("סיגנל סינתטי", ["weak", "null"],
+                        format_func=lambda m: "סיגנל חלש (ברירת מחדל)" if m == "weak"
+                        else "ללא סיגנל (ביקורת)",
+                        help="ללא סיגנל = לנתונים אין שום קשר לתשואות. כל אלפא שתימצא "
+                             "שם היא מזל בלבד.")
 
 params = ExperimentParams(
     seed=int(seed), n_stocks=int(n_stocks), n_periods=int(n_periods), top_n=int(top_n),
     random_trials=int(trials), rank_by=rank_by,
-    signal=SignalConfig.null() if mode.startswith("Null") else SignalConfig(),
+    signal=SignalConfig.null() if mode == "null" else SignalConfig(),
 )
 ctx = load(params, defaults.experiment_dir)
 
 with st.sidebar:
     status = ctx.status
-    st.markdown("**Data source**")
-    st.html(theme.pill(status.label, theme.WARNING) + "&nbsp;"
-            + theme.pill("NO LIVE FEED", theme.NEUTRAL))
-    st.caption(f"{status.source}\n\n{status.universe} stocks, {fmt_date(status.first)} to "
-               f"{fmt_date(status.as_of)}, {status.signal_mode.lower()}. "
-               f"Pipeline ran in {ctx.runtime_seconds:.1f}s.")
-    st.caption("No broker, no external APIs, no trading.")
+    st.markdown("**מקור נתונים**")
+    st.html(theme.pill("סינתטי", theme.WARNING) + "&nbsp;"
+            + theme.pill("אין נתונים חיים", theme.NEUTRAL))
+    st.caption(f"{status.source}\n\n{status.universe} מניות, {fmt_date(status.first)} עד "
+               f"{fmt_date(status.as_of)}, "
+               f"{he.SIGNAL_MODES.get(status.signal_mode, status.signal_mode)}. "
+               f"הניסוי רץ ב-{ctx.runtime_seconds:.1f} שניות.")
+    st.caption("אין ברוקר, אין API חיצוניים ואין מסחר.")
 
 VIEWS[page].render(ctx)

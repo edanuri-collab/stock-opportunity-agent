@@ -104,9 +104,34 @@ def test_risk_flags_rules(dataset):
 def test_financial_metrics_and_factor_profile(dataset):
     s = dataset.snapshots_at(dataset.timestamps[0])[0]
     m = an.financial_metrics(s)
-    assert {"P/E", "Market Cap", "Short Interest", "Days to Cover"} <= set(m)
+    assert len(m) == 16 and {"מכפיל רווח (P/E)", "שווי שוק", "ימים לכיסוי שורט"} <= set(m)
     prof = an.factor_profile(s)
     assert "Noise" not in set(prof["Factor"]) and prof["Score"].between(0, 100).all()
+
+
+def test_hebrew_reasoning_uses_agent_drivers(experiment):
+    ts = experiment.dataset.timestamps[1]
+    s = experiment.dataset.snapshots_at(ts)[0]
+    text = an.reasoning_he("Value Hunter", s, 61.2).replace("⁦", "").replace("⁩", "")
+    assert text.startswith(f"Value Hunter נותן ל-{s.ticker} ציון 61.2/100")
+    assert "גורמים מובילים" in text and "סיכון" in text
+    assert "פלסבו" in an.reasoning_he("Random Agent", s, 50.0)
+    views = an.agent_views(experiment, s.ticker, ts)
+    assert views["Reasoning"].str.len().gt(20).all()
+
+
+def test_i18n_translates_columns_and_values(experiment):
+    from dashboard import i18n as he
+
+    df = he.frame(an.agent_leaderboard(experiment), ["Type", "Status"])
+    assert {"סוכן", "אלפא", "סטטוס", "ציון הזדמנות"} <= set(df.columns)
+    assert set(df["סוג"]) == {"אסטרטגיה", "ביקורת"}
+    assert set(df["סטטוס"]) <= {"עדיף על השוק", "נחות מהשוק", "לא מובהק"}
+    assert he.v(MARKET) == "מדד השוק" and he.v("Value Hunter") == "Value Hunter"
+    opp = he.frame(an.opportunities_frame(experiment, experiment.dataset.timestamps[0]),
+                   ["Sector"])
+    assert all(c in he.COLUMNS.values() for c in opp.columns)
+    assert not set(opp["סקטור"]) & {"Technology", "Energy", "Healthcare"}
 
 
 def test_long_curves_kinds(experiment):

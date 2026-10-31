@@ -37,8 +37,9 @@ always gets the same id and the same results (only `timestamp` differs). `Experi
 
 ## Dashboard
 
-Dark, multi-screen Streamlit app (theme in `.streamlit/config.toml`). Every screen shows a
-**SYNTHETIC DATA** banner; the sidebar shows the data-source status (synthetic, no live feed).
+Dark, multi-screen Streamlit app in **Hebrew, right-to-left** (texts in `dashboard/i18n.py`, theme in
+`.streamlit/config.toml`). Every screen shows a
+"נתונים סינתטיים" (synthetic data) banner; the sidebar shows the data-source status (synthetic, no live feed).
 
 | Screen | What it shows |
 |---|---|

@@ -29,7 +29,7 @@ def test_every_page_renders(small_env, page):
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     at.sidebar.radio(key="page").set_value(page).run()
     assert not at.exception, page
-    assert any("SYNTHETIC DATA" in str(h.proto) for h in at.get("html")), page
+    assert any("נתונים סינתטיים" in str(h.proto) for h in at.get("html")), page
 
 
 def test_opportunity_filters_do_not_crash(small_env):

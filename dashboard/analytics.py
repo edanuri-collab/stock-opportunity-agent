@@ -12,10 +12,12 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 
+from agents import default_agents
+from dashboard.i18n import FACTORS as FACTOR_HE
 from data.models import StockSnapshot
 from engine.benchmarks import BUY_HOLD, MARKET, RANDOM
 from engine.experiment import Experiment
-from engine.scoring import compute_components, fcf_yield
+from engine.scoring import compute_components, fcf_yield, top_factors
 
 CONTROL_AGENTS = frozenset({"Random Agent"})  # placebo: never counted as a recommendation
 BENCHMARK_NAMES = (MARKET, BUY_HOLD, RANDOM)
@@ -67,7 +69,7 @@ def data_source_status(exp: Experiment) -> DataSourceStatus:
         signal.get(k, 0) == 0 for k in ("value", "quality", "catalyst", "momentum", "breakout",
                                          "squeeze", "contrarian", "hidden"))
     return DataSourceStatus(
-        source="Synthetic generator (data/sample_data.py)",
+        source="מחולל סינתטי (data/sample_data.py)",
         is_synthetic=True,
         live_feed=False,
         dataset_version=exp.dataset_version,
@@ -204,16 +206,20 @@ def snapshot_of(exp: Experiment, ticker: str, timestamp: datetime) -> StockSnaps
 
 
 def financial_metrics(s: StockSnapshot) -> Dict[str, str]:
-    pe = f"{s.pe_ratio:.1f}" if s.pe_ratio > 0 else "n/m (loss)"
+    """Display label (Hebrew) -> formatted value."""
+    pe = f"{s.pe_ratio:.1f}" if s.pe_ratio > 0 else "לא רלוונטי (הפסד)"
     return {
-        "Price": f"${s.price:,.2f}", "Market Cap": format_money(s.market_cap),
-        "Shares Out": f"{s.shares_outstanding / 1e6:,.0f}M", "P/E": pe,
-        "P/S": f"{s.price_to_sales:.1f}", "FCF Yield": f"{fcf_yield(s):.1%}",
-        "Revenue Growth": f"{s.revenue_growth:+.1%}", "Earnings Growth": f"{s.earnings_growth:+.1%}",
-        "Debt / Equity": f"{s.debt_to_equity:.2f}", "Volatility": f"{s.volatility:.0%}",
-        "6m Momentum": f"{s.momentum:+.1%}", "Rel. Strength": f"{s.relative_strength:.0f}",
-        "Short Interest": f"{s.short_interest:.1%}", "Days to Cover": f"{s.days_to_cover:.1f}",
-        "From 52w High": f"-{s.distance_from_high:.1%}", "Volume Ratio": f"{s.volume_ratio:.2f}x",
+        "מחיר": f"${s.price:,.2f}", "שווי שוק": format_money(s.market_cap),
+        "מניות במחזור": f"{s.shares_outstanding / 1e6:,.0f}M", "מכפיל רווח (P/E)": pe,
+        "מכפיל מכירות (P/S)": f"{s.price_to_sales:.1f}",
+        "תשואת תזרים חופשי": f"{fcf_yield(s):.1%}",
+        "צמיחה בהכנסות": f"{s.revenue_growth:+.1%}", "צמיחה ברווח": f"{s.earnings_growth:+.1%}",
+        "חוב להון": f"{s.debt_to_equity:.2f}", "תנודתיות שנתית": f"{s.volatility:.0%}",
+        "מומנטום 6 חודשים": f"{s.momentum:+.1%}", "חוזק יחסי": f"{s.relative_strength:.0f}",
+        "שורט מהמניות הצפות": f"{s.short_interest:.1%}",
+        "ימים לכיסוי שורט": f"{s.days_to_cover:.1f}",
+        "מרחק משיא 52 שבועות": f"-{s.distance_from_high:.1%}",
+        "יחס מחזור מסחר": f"{s.volume_ratio:.2f}x",
     }
 
 
@@ -231,34 +237,79 @@ def agent_views(exp: Experiment, ticker: str, timestamp: datetime,
     at["rank"] = at.groupby("agent")["opportunity_score"].rank(ascending=False, method="min")
     mine = at[at["ticker"] == ticker]
     top_n, universe = exp.parameters["top_n"], at["ticker"].nunique()
+    snap = snapshot_of(exp, ticker, timestamp)
     rows = [{"Agent": r.agent, "Type": "Control" if is_control(r.agent) else "Strategy",
              "Opportunity Score": r.opportunity_score, "Rank": f"{int(r.rank)} / {universe}",
-             "Picked": int(r.rank) <= top_n, "Reasoning": r.reasoning}
+             "Picked": int(r.rank) <= top_n,
+             "Reasoning": reasoning_he(r.agent, snap, r.opportunity_score)}
             for r in mine.itertuples()]
     return pd.DataFrame(rows).sort_values(["Opportunity Score", "Agent"],
                                           ascending=[False, True]).reset_index(drop=True)
 
 
 def risk_flags(s: StockSnapshot) -> List[str]:
-    """Rule-based risk notes derived from the snapshot (no outcome data)."""
+    """Rule-based risk notes (Hebrew) derived from the snapshot (no outcome data)."""
     flags = []
     if s.volatility >= 0.5:
-        flags.append(f"High volatility ({s.volatility:.0%} annualised)")
+        flags.append(f"תנודתיות גבוהה ({s.volatility:.0%} בשנה)")
     if s.debt_to_equity >= 1.5:
-        flags.append(f"High leverage (debt/equity {s.debt_to_equity:.2f})")
+        flags.append(f"מינוף גבוה (חוב להון {s.debt_to_equity:.2f})")
     if s.free_cash_flow < 0:
-        flags.append("Negative free cash flow")
+        flags.append("תזרים מזומנים חופשי שלילי")
     if s.pe_ratio <= 0:
-        flags.append("Loss-making (negative earnings)")
+        flags.append("החברה מפסידה (רווח שלילי)")
     if s.market_cap < 2e9:
-        flags.append(f"Small cap ({format_money(s.market_cap)})")
+        flags.append(f"חברה קטנה (שווי שוק {ltr(format_money(s.market_cap))})")
     if s.short_interest >= 0.2:
-        flags.append(f"Heavily shorted ({s.short_interest:.0%} of float)")
+        flags.append(f"שורט גבוה ({s.short_interest:.0%} מהמניות הצפות)")
     if s.distance_from_high >= 0.3:
-        flags.append(f"Deep drawdown ({s.distance_from_high:.0%} below 52w high)")
+        flags.append(f"ירידה עמוקה ({s.distance_from_high:.0%} מתחת לשיא 52 שבועות)")
     if s.revenue_growth < 0:
-        flags.append(f"Shrinking revenue ({s.revenue_growth:+.1%})")
+        flags.append(f"הכנסות מתכווצות ({ltr(f'{s.revenue_growth:+.1%}')})")
     return flags
+
+
+_AGENTS = {a.name: a for a in default_agents()}
+
+def ltr(text: object) -> str:
+    """Isolate a Latin/numeric fragment so it reads left-to-right inside Hebrew text."""
+    return f"⁦{text}⁩"
+
+
+_FACTOR_FACTS = {
+    "value": lambda s: (ltr(f"P/E {s.pe_ratio:.1f}") if s.pe_ratio > 0 else "P/E שלילי")
+    + f", {ltr(f'P/S {s.price_to_sales:.1f}')}, תשואת תזרים {ltr(f'{fcf_yield(s):.1%}')}",
+    "quality": lambda s: f"צמיחה בהכנסות {ltr(f'{s.revenue_growth:+.1%}')}, "
+                         f"חוב להון {ltr(f'{s.debt_to_equity:.2f}')}",
+    "momentum": lambda s: f"מומנטום 6 חודשים {ltr(f'{s.momentum:+.1%}')}, "
+                          f"חוזק יחסי {s.relative_strength:.0f}",
+    "catalyst": lambda s: f"ציון קטליזטור {s.catalyst_score:.0f}, סנטימנט {s.sentiment_score:.0f}",
+    "breakout": lambda s: f"{ltr(f'{s.distance_from_high:.1%}')} מתחת לשיא, "
+                          f"מחזור {ltr(f'x{s.volume_ratio:.1f}')}",
+    "squeeze": lambda s: f"שורט {ltr(f'{s.short_interest:.1%}')}, "
+                         f"{s.days_to_cover:.1f} ימים לכיסוי",
+    "contrarian": lambda s: f"{ltr(f'{s.distance_from_high:.0%}')} מתחת לשיא, צמיחה ברווח "
+                            f"{ltr(f'{s.earnings_growth:+.1%}')}",
+}
+
+
+def reasoning_he(agent: str, s: StockSnapshot, score: float) -> str:
+    """Hebrew explanation built from the same components and weights the agent used."""
+    if is_control(agent):
+        return (f"בחירת פלסבו: הציון ({score:.1f}) נקבע מ-{ltr('hash')} של הטיקר והתאריך, "
+                "ומתעלם מכל נתוני המניה.")
+    cfg = _AGENTS.get(agent)
+    if cfg is None:
+        return f"{ltr(agent)} נותן ל-{ltr(s.ticker)} ציון {ltr(f'{score:.1f}/100')}."
+    comps = compute_components(s)
+    cd = comps.as_dict()
+    drivers = top_factors(comps, cfg.weights, 2)
+    driver_txt = ", ".join(f"{FACTOR_HE[f]} {cd[f]:.0f}" for f in drivers)
+    facts = "; ".join(_FACTOR_FACTS[f](s) for f in drivers if f in _FACTOR_FACTS)
+    penalty = cfg.risk_penalty * comps.risk
+    return (f"{ltr(agent)} נותן ל-{ltr(s.ticker)} ציון {ltr(f'{score:.1f}/100')}. "
+            f"גורמים מובילים: {driver_txt}. "
+            f"נתונים: {facts}. ציון הסיכון ({comps.risk:.0f}) מוריד {penalty:.1f} נקודות.")
 
 
 def score_history(exp: Experiment, ticker: str, until: datetime,
