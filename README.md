@@ -102,6 +102,8 @@ Only afterwards is the outcome after T drawn: market + sector shock + a *small* 
 - every agent concept (value, quality, catalyst, momentum, breakout, squeeze, contrarian) gets the same weak loading
 - each loading is multiplied by a random, seeded, per-regime factor (it can even flip sign)
 - part of the edge is a hidden alpha no feature observes
+- extended fundamentals (P/B, ROE, ROIC, gross margin, dividends, earnings surprise, year-over-year changes) are noisy proxies of the same state, drawn on a separate random stream; `f_score` is a simplified 0-7 Piotroski score, not the published 0-9
+- low risk, short-term reversal and size carry the same weak loading, so these families are neither favoured nor handicapped
 - `SignalConfig.null()` removes every relationship: any alpha found there is luck (used as a control, also selectable in the dashboard)
 
 ## Benchmarks (`engine/benchmarks.py`)

@@ -20,6 +20,7 @@ from dashboard.i18n import FACTORS as FACTOR_HE
 from engine.backtest import decide, run_backtest
 from engine.evaluation import compute_agent_metrics
 from data.models import StockSnapshot
+from data.sample_data import SIGNAL_KEYS
 from engine.benchmarks import BUY_HOLD, MARKET, RANDOM
 from engine.experiment import Experiment
 from engine.scoring import compute_components, fcf_yield, top_factors
@@ -70,9 +71,7 @@ class DataSourceStatus:
 def data_source_status(exp: Experiment) -> DataSourceStatus:
     ds = exp.dataset
     signal = exp.parameters.get("signal", {})
-    null = bool(signal) and all(
-        signal.get(k, 0) == 0 for k in ("value", "quality", "catalyst", "momentum", "breakout",
-                                         "squeeze", "contrarian", "hidden"))
+    null = bool(signal) and all(signal.get(k, 0) == 0 for k in SIGNAL_KEYS)
     return DataSourceStatus(
         source="מחולל סינתטי (data/sample_data.py)",
         is_synthetic=True,
@@ -227,6 +226,12 @@ def financial_metrics(s: StockSnapshot) -> Dict[str, str]:
         "ימים לכיסוי שורט": f"{s.days_to_cover:.1f}",
         "מרחק משיא 52 שבועות": f"-{s.distance_from_high:.1%}",
         "יחס מחזור מסחר": f"{s.volume_ratio:.2f}x",
+        "מכפיל הון (P/B)": f"{s.price_to_book:.2f}", "תשואה על ההון (ROE)": f"{s.roe:.1%}",
+        "תשואה על ההון המושקע (ROIC)": f"{s.roic:.1%}",
+        "שולי רווח גולמי": f"{s.gross_margin:.1%}",
+        "תשואת דיבידנד": f"{s.dividend_yield:.1%}",
+        "הפתעת רווחים": f"{s.earnings_surprise:+.1%}",
+        "מומנטום 12-1 חודשים": f"{s.momentum_12_1:+.1%}", "בטא": f"{s.beta:.2f}",
     }
 
 

@@ -13,6 +13,10 @@ agent concept gets the same small loading, loadings flip sign by regime at rando
 and part of the edge is hidden alpha that no feature observes. A ``SignalConfig.null()``
 dataset has no edge at all, so any "alpha" found there is pure luck.
 Same arguments -> identical data, and growing ``n_periods`` never changes earlier periods.
+
+The extended fundamentals (P/B, ROE, dividends, ...) are noisy proxies of the same hidden state
+and use their own random stream. Low risk, short-term reversal and size get the same weak
+loading as every other concept, so no strategy family is favoured or handicapped by design.
 """
 from __future__ import annotations
 
@@ -27,8 +31,10 @@ from data.models import MarketDataset, StockSnapshot
 
 REGIMES = ("bull", "bear", "sideways")
 WARMUP_PERIODS = 12  # simulated history before the first emitted timestamp (not emitted)
-SIGNAL_KEYS = ("value", "quality", "catalyst", "momentum", "breakout", "squeeze",
-               "contrarian", "hidden")
+_BASE_SIGNAL_KEYS = ("value", "quality", "catalyst", "momentum", "breakout", "squeeze",
+                     "contrarian", "hidden")
+_EXTRA_SIGNAL_KEYS = ("reversal", "low_vol", "size")
+SIGNAL_KEYS = _BASE_SIGNAL_KEYS + _EXTRA_SIGNAL_KEYS
 
 _REGIME_START_WEIGHTS = (0.45, 0.20, 0.35)
 _REGIME_STAY_PROB = 0.7
@@ -62,6 +68,9 @@ class SignalConfig:
     squeeze: float = 0.0015
     contrarian: float = 0.0015
     hidden: float = 0.0015         # edge that no feature observes
+    reversal: float = 0.0015
+    low_vol: float = 0.0015
+    size: float = 0.0015
     regime_dispersion: float = 0.6  # std of the random per-regime multiplier of each loading
     noise_scale: float = 1.0        # multiplies idiosyncratic noise
 
@@ -91,6 +100,8 @@ class _Stock:
     short_f: float
     hidden: float
     prices: List[float] = field(default_factory=list)  # price history incl. current
+    pays_dividend: bool = False
+    quality_history: List[float] = field(default_factory=list)  # last 13 months incl. current
 
 
 def _clip(x: float, lo: float, hi: float) -> float:
@@ -156,7 +167,23 @@ def _price_features(s: _Stock) -> Dict[str, float]:
         "distance_from_high": 1 - p[-1] / max(window),
         "volatility": sd * math.sqrt(12),
         "last_return": p[-1] / p[-2] - 1 if len(p) > 1 else 0.0,
+        "momentum_12_1": p[-2] / p[max(0, len(p) - 13)] - 1 if len(p) > 1 else 0.0,
     }
+
+
+def _estimate_beta(prices: List[float], market_history: List[float]) -> float:
+    """OLS beta of the trailing monthly returns on the market, using data up to T only."""
+    n = min(len(prices) - 1, len(market_history))
+    if n < 3:
+        return 1.0
+    window = prices[-(n + 1):]
+    y = [b / a - 1 for a, b in zip(window[:-1], window[1:])]
+    x = market_history[-n:]
+    mx, my = sum(x) / n, sum(y) / n
+    sxx = sum((a - mx) ** 2 for a in x)
+    if sxx == 0:
+        return 1.0
+    return _clip(sum((a - mx) * (b - my) for a, b in zip(x, y)) / sxx, -1.0, 4.0)
 
 
 def _observe(rng: random.Random, s: _Stock, pf: Dict[str, float]) -> Dict[str, float]:
@@ -192,6 +219,37 @@ def _observe(rng: random.Random, s: _Stock, pf: Dict[str, float]) -> Dict[str, f
     }
 
 
+def _observe_extended(rng: random.Random, s: _Stock, pf: Dict[str, float],
+                      market_history: List[float], pe_ratio: float) -> Dict[str, float]:
+    """Extended fundamentals at T: noisy proxies of the hidden state, on their own stream."""
+    g = rng.gauss
+    quality_delta = s.quality_f - s.quality_history[0]
+    roe = _clip(0.12 + 0.07 * s.quality_f + 0.03 * g(0, 1), -0.5, 0.6)
+    roic = _clip(0.10 + 0.06 * s.quality_f + 0.03 * g(0, 1), -0.5, 0.6)
+    if pe_ratio <= 0:  # loss-making companies cannot show positive returns on capital
+        roe, roic = -abs(roe), -abs(roic)
+    dividend = (_clip(0.025 * math.exp(0.35 * s.value_f + 0.2 * g(0, 1)), 0.002, 0.12)
+                if s.pays_dividend else 0.0)
+    trend = 1.0
+    for r in market_history[-6:]:
+        trend *= 1 + r
+    return {
+        "price_to_book": _clip(1.8 * math.exp(-0.4 * s.value_f + 0.25 * g(0, 1)), 0.2, 25.0),
+        "roe": roe,
+        "roic": roic,
+        "gross_margin": _clip(0.40 + 0.09 * s.quality_f + 0.04 * g(0, 1), 0.05, 0.9),
+        "dividend_yield": dividend,
+        "earnings_surprise": _clip(0.02 + 0.04 * s.catalyst_f + 0.06 * g(0, 1), -0.6, 0.6),
+        "momentum_12_1": pf["momentum_12_1"],
+        "return_1m": pf["last_return"],
+        "beta": _estimate_beta(s.prices, market_history),
+        "market_trend": trend - 1,
+        "roe_change": 0.07 * quality_delta + 0.02 * g(0, 1),
+        "gross_margin_change": 0.09 * quality_delta + 0.015 * g(0, 1),
+        "debt_change": -0.3 * quality_delta + 0.1 * g(0, 1),
+    }
+
+
 def _drivers(s: _Stock, pf: Dict[str, float]) -> Dict[str, float]:
     """Standardised state at T that the outcome loads on (all known at T)."""
     return {
@@ -204,6 +262,9 @@ def _drivers(s: _Stock, pf: Dict[str, float]) -> Dict[str, float]:
         # high only when BOTH a deep drawdown and strong quality are present
         "contrarian": _clip(min((pf["distance_from_high"] - 0.15) / 0.10, s.quality_f), -3, 3),
         "hidden": s.hidden,
+        "reversal": _clip(-pf["last_return"] / 0.08, -3, 3),
+        "low_vol": _clip((0.35 - pf["volatility"]) / 0.15, -3, 3),
+        "size": _clip((10.2 - math.log10(max(s.prices[-1] * s.shares, 1.0))) / 0.4, -3, 3),
     }
 
 
@@ -231,10 +292,17 @@ def generate_dataset(
     cfg = signal or SignalConfig()
     strengths = {k: getattr(cfg, k) for k in SIGNAL_KEYS}
     rng = random.Random(seed)
+    extended_rng = random.Random(seed * 7919 + 101)  # draws here never shift the main stream
     stocks = [_init_stock(rng, t, cfg.noise_scale) for t in _make_tickers(rng, n_stocks)]
+    for s in stocks:
+        s.pays_dividend = extended_rng.random() < 0.6
     # Random per-regime multiplier of every loading: which factor "works" depends on the seed.
     multipliers = {r: {k: _clip(1 + cfg.regime_dispersion * rng.gauss(0, 1), -1.0, 3.0)
-                       for k in SIGNAL_KEYS} for r in REGIMES}
+                       for k in _BASE_SIGNAL_KEYS} for r in REGIMES}
+    for r in REGIMES:
+        multipliers[r].update({k: _clip(1 + cfg.regime_dispersion * extended_rng.gauss(0, 1),
+                                        -1.0, 3.0) for k in _EXTRA_SIGNAL_KEYS})
+    market_history: List[float] = []  # market returns up to T, never later
 
     snapshots: List[StockSnapshot] = []
     outcomes: Dict[Tuple[str, datetime], float] = {}
@@ -251,9 +319,14 @@ def generate_dataset(
         observed, drivers = [], []
         for s in stocks:
             _advance_state(rng, s)
+            s.quality_history = (s.quality_history + [s.quality_f])[-13:]
             pf = _price_features(s)
             drivers.append(_drivers(s, pf))
-            observed.append(_observe(rng, s, pf) if emit else {})
+            feats = _observe(rng, s, pf) if emit else {}
+            if emit:
+                feats.update(_observe_extended(extended_rng, s, pf, market_history,
+                                               feats["pe_ratio"]))
+            observed.append(feats)
         if emit:
             ranks = _percentile_ranks([o["momentum"] for o in observed])
             for s, feats, rank in zip(stocks, observed, ranks):
@@ -264,6 +337,7 @@ def generate_dataset(
         # (3): outcome after T, drawn only now.
         mean, sd = _REGIME_MARKET[regime]
         market = rng.gauss(mean, sd)
+        market_history = (market_history + [market])[-12:]
         sector_shock = {sec: 0.025 * rng.gauss(0, 1) for sec in sorted(_SECTORS)}
         mult = multipliers[regime]
         for s, drv in zip(stocks, drivers):

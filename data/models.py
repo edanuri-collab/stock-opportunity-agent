@@ -39,6 +39,19 @@ class StockSnapshot:
     short_interest: float       # fraction of float sold short
     days_to_cover: float        # short interest / average daily volume (in shares)
     distance_from_high: float   # fraction below 52-week high (0 = at the high)
+    price_to_book: float
+    roe: float                  # return on equity, 0.15 = 15%
+    roic: float                 # return on invested capital
+    gross_margin: float
+    dividend_yield: float       # 0 = pays no dividend
+    earnings_surprise: float    # last reported earnings vs expectations, 0.05 = +5%
+    momentum_12_1: float        # return from 12 months ago to 1 month ago (skips the last month)
+    return_1m: float            # return of the last month
+    beta: float                 # estimated from the trailing 12 months against the market
+    market_trend: float         # trailing 6m market return (same for every stock at T)
+    roe_change: float           # ROE now minus 12 months ago
+    gross_margin_change: float  # gross margin now minus 12 months ago
+    debt_change: float          # debt/equity now minus 12 months ago
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)

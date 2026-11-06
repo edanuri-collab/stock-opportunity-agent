@@ -34,6 +34,16 @@ def _earnings_yield(s: StockSnapshot) -> float:
     return 1.0 / s.pe_ratio if s.pe_ratio != 0 else 0.0
 
 
+def f_score(s: StockSnapshot) -> float:
+    """Simplified Piotroski F-Score, 0-7. The share-issuance test and the balance-sheet items
+    the data model does not carry are left out, so this is not the published 0-9 score."""
+    return float(sum((
+        s.roe > 0, s.free_cash_flow > 0, s.roe_change > 0,
+        fcf_yield(s) > _earnings_yield(s),  # cash earnings above accounting earnings
+        s.debt_change < 0, s.gross_margin_change > 0, s.revenue_growth > 0,
+    )))
+
+
 def _factor(name: str) -> Callable[[StockSnapshot], float]:
     return lambda s: getattr(compute_components(s), name)
 
@@ -58,6 +68,20 @@ FIELDS: Dict[str, Tuple[str, Callable[[StockSnapshot], float]]] = {
     "sentiment_score": ("score", lambda s: s.sentiment_score),
     "short_interest": ("pct", lambda s: s.short_interest),
     "days_to_cover": ("ratio", lambda s: s.days_to_cover),
+    "price_to_book": ("ratio", lambda s: s.price_to_book),
+    "roe": ("pct", lambda s: s.roe),
+    "roic": ("pct", lambda s: s.roic),
+    "gross_margin": ("pct", lambda s: s.gross_margin),
+    "dividend_yield": ("pct", lambda s: s.dividend_yield),
+    "earnings_surprise": ("pct", lambda s: s.earnings_surprise),
+    "momentum_12_1": ("pct", lambda s: s.momentum_12_1),
+    "return_1m": ("pct", lambda s: s.return_1m),
+    "beta": ("ratio", lambda s: s.beta),
+    "market_trend": ("pct", lambda s: s.market_trend),
+    "roe_change": ("pct", lambda s: s.roe_change),
+    "gross_margin_change": ("pct", lambda s: s.gross_margin_change),
+    "debt_change": ("ratio", lambda s: s.debt_change),
+    "f_score": ("ratio", f_score),
     **{f"factor_{f}": ("score", _factor(f)) for f in WEIGHT_FACTORS + ("risk",)},
 }
 

@@ -104,7 +104,7 @@ def test_risk_flags_rules(dataset):
 def test_financial_metrics_and_factor_profile(dataset):
     s = dataset.snapshots_at(dataset.timestamps[0])[0]
     m = an.financial_metrics(s)
-    assert len(m) == 16 and {"מכפיל רווח (P/E)", "שווי שוק", "ימים לכיסוי שורט"} <= set(m)
+    assert len(m) == 24 and {"מכפיל רווח (P/E)", "מכפיל הון (P/B)", "בטא"} <= set(m)
     prof = an.factor_profile(s)
     assert "Noise" not in set(prof["Factor"]) and prof["Score"].between(0, 100).all()
 

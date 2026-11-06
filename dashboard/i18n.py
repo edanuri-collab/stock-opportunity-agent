@@ -130,6 +130,13 @@ FIELDS = {
     "volatility": "תנודתיות", "catalyst_score": "ציון קטליזטור",
     "sentiment_score": "ציון סנטימנט", "short_interest": "שורט מהמניות הצפות",
     "days_to_cover": "ימים לכיסוי שורט",
+    "price_to_book": "מכפיל הון (P/B)", "roe": "תשואה על ההון (ROE)",
+    "roic": "תשואה על ההון המושקע (ROIC)", "gross_margin": "שולי רווח גולמי",
+    "dividend_yield": "תשואת דיבידנד", "earnings_surprise": "הפתעת רווחים",
+    "momentum_12_1": "מומנטום 12-1 חודשים", "return_1m": "תשואת החודש האחרון",
+    "beta": "בטא", "market_trend": "מגמת השוק (6 חודשים)",
+    "roe_change": "שינוי ב-ROE בשנה", "gross_margin_change": "שינוי בשולי הרווח בשנה",
+    "debt_change": "שינוי בחוב להון בשנה", "f_score": "F-Score מקורב (0-7)",
     **{f"factor_{k}": f"גורם {v}" for k, v in FACTORS.items() if k != "noise"},
 }
 # how a field's value is typed in the builder: raw value = typed value x factor
