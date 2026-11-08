@@ -1,0 +1,31 @@
+name = "Quality Dip"
+family = "contrarian"
+origin = "original"
+description = "רעיון חדש: חברות איכותיות (ROE גבוה, חוב סביר) שירדו לפחות 15% מהשיא. מניח שהירידה זמנית כשהעסק עצמו בריא."
+reference = ""
+risk_penalty = 0.0
+
+[[filters]]
+field = "roe"
+op = ">="
+value = 0.12
+
+[[filters]]
+field = "debt_to_equity"
+op = "<="
+value = 1.0
+
+[[filters]]
+field = "distance_from_high"
+op = ">="
+value = 0.15
+
+[[rank]]
+field = "f_score"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "distance_from_high"
+prefer = "high"
+weight = 1.0

@@ -78,9 +78,14 @@ def _catalog(ctx: DashboardContext) -> None:
                 st.caption(f"מקור: {agent.reference}")
             if an.is_control(name):
                 st.markdown("- בחירה פסאודו-אקראית (hash של טיקר ותאריך). מתעלם מכל הנתונים.")
+            elif an.is_meta(agent):
+                st.markdown("- רץ אחרי כל הסוכנים, על ההחלטות שלהם באותו תאריך בלבד.\n"
+                            "- הציון: אחוז סוכני האסטרטגיה שמחזיקים את המניה ב-Top N.\n"
+                            "- נבחרות רק מניות שלפחות שני סוכנים בחרו. סוכן הביקורת לא "
+                            "מצביע.")
             else:
                 st.markdown("\n".join(f"- {line}" for line in an.rules_he(spec)))
-            if not exact and not an.is_control(name):
+            if not exact and not an.is_control(name) and not an.is_meta(agent):
                 st.caption("סוכן ליבה שמוגדר בקוד Python (agents/). "
                            "אפשר לשכפל אותו כנקודת התחלה בבונה הסוכנים.")
             st.caption(f"גרסה: {ctx.exp.agent_versions.get(name, '-')} · מיקום: "
@@ -137,13 +142,17 @@ def _builder(ctx: DashboardContext) -> None:
     st.markdown("בנה סוכן חדש: בחר **תנאי סינון** (אופציונלי) ושיטת ניקוד אחת. "
                 "התצוגה המקדימה מריצה את הסוכן על אותם נתונים, ולאחר השמירה הוא מצטרף "
                 "לכל המסכים.")
-    templates = [BLANK] + [a.name for a in ctx.registry.agents if not an.is_control(a.name)]
+    templates = [BLANK] + [a.name for a in ctx.registry.agents
+                           if not an.is_control(a.name) and not an.is_meta(a)]
     start = st.selectbox("להתחיל מ...", templates, key="b_template",
                          help="שכפול של סוכן קיים כנקודת התחלה לווריאציה")
     base = None
     if start != BLANK:
         base, _ = spec_of(next(a for a in ctx.registry.agents if a.name == start))
     k = f"b_{templates.index(start)}_"  # widget keys reset when the template changes
+    if base is not None and base.switch is not None:
+        st.info("לסוכן הזה יש החלפה לפי מצב השוק. הבונה עורך רק את השיטה הראשית, ולכן העותק "
+                "יישמר בלי ההחלפה. אפשר להוסיף אותה ידנית בקובץ ה-TOML.")
 
     c1, c2, c3 = st.columns([1.4, 1, 1])
     name = c1.text_input("שם הסוכן (באנגלית, עד 40 תווים)",

@@ -6,6 +6,9 @@ scoring method:
 * ``weights``: weighted sum of the shared factor scores (like the core agents), or
 * ``rank``: cross-sectional percentile rank of data fields among the stocks that passed.
 
+An optional ``switch`` condition (e.g. ``market_trend > 0``) selects the scoring method per
+stock: the main one while it holds, the alternative (``alt_weights`` / ``alt_rank``) otherwise.
+
 Every field is computed from the ``StockSnapshot`` alone, so a spec agent can only see what
 was knowable at T. Specs are stored as TOML files (see ``agents/registry.py``).
 """
@@ -14,7 +17,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Callable, Dict, List, Mapping, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from data.models import StockSnapshot
 from engine.scoring import FACTORS, compute_components, fcf_yield
@@ -122,10 +125,23 @@ class AgentSpec:
     filters: Tuple[Filter, ...] = ()
     weights: Tuple[Tuple[str, float], ...] = ()   # normalised to sum 1
     rank: Tuple[RankField, ...] = ()
+    switch: Optional[Filter] = None               # when False, the alt_* scoring is used
+    alt_weights: Tuple[Tuple[str, float], ...] = ()
+    alt_rank: Tuple[RankField, ...] = ()
 
     @property
     def method(self) -> str:
+        if self.switch is not None:
+            return "switch"
         return "rank" if self.rank else "weights"
+
+    @property
+    def uses_rank(self) -> bool:
+        return bool(self.rank or self.alt_rank)
+
+    @property
+    def alt_weights_map(self) -> Dict[str, float]:
+        return dict(self.alt_weights)
 
     @property
     def weights_map(self) -> Dict[str, float]:
@@ -136,6 +152,9 @@ class AgentSpec:
         d["weights"] = self.weights_map
         d["filters"] = [asdict(f) for f in self.filters]
         d["rank"] = [asdict(r) for r in self.rank]
+        d["switch"] = asdict(self.switch) if self.switch else None
+        d["alt_weights"] = self.alt_weights_map
+        d["alt_rank"] = [asdict(r) for r in self.alt_rank]
         return d
 
     # ---- construction & validation ---------------------------------------------------
@@ -143,7 +162,7 @@ class AgentSpec:
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "AgentSpec":
         known = {"name", "family", "description", "origin", "reference", "risk_penalty",
-                 "filters", "weights", "rank"}
+                 "filters", "weights", "rank", "switch", "alt_weights", "alt_rank"}
         unknown = set(raw) - known
         if unknown:
             raise SpecError(f"unknown keys: {sorted(unknown)}")
@@ -164,23 +183,39 @@ class AgentSpec:
             raise SpecError("risk_penalty must be within [0, 1]")
 
         filters = tuple(_filter(f, i) for i, f in enumerate(raw.get("filters", []) or []))
-        weights_raw = raw.get("weights", {}) or {}
-        rank = tuple(_rank(r, i) for i, r in enumerate(raw.get("rank", []) or []))
-        if bool(weights_raw) == bool(rank):
-            raise SpecError("define exactly one scoring method: [weights] or [[rank]]")
-        weights: Tuple[Tuple[str, float], ...] = ()
-        if weights_raw:
-            bad = set(weights_raw) - set(WEIGHT_FACTORS)
-            if bad:
-                raise SpecError(f"unknown weight factors {sorted(bad)}; use {WEIGHT_FACTORS}")
-            values = {k: _number(v, f"weights.{k}") for k, v in weights_raw.items()}
-            if any(v < 0 for v in values.values()) or sum(values.values()) <= 0:
-                raise SpecError("weights must be non-negative and not all zero")
-            total = sum(values.values())
-            weights = tuple(sorted((k, v / total) for k, v in values.items() if v > 0))
+        weights, rank = _scoring(raw.get("weights"), raw.get("rank"), "")
+        switch, alt_weights, alt_rank = None, (), ()
+        if raw.get("switch") is not None:
+            switch = _filter(raw["switch"], 0, "switch")
+            alt_weights, alt_rank = _scoring(raw.get("alt_weights"), raw.get("alt_rank"), "alt_")
+        elif raw.get("alt_weights") or raw.get("alt_rank"):
+            raise SpecError("alt_weights / alt_rank need a [switch] condition")
         return cls(name=name, family=family, description=description, origin=origin,
                    reference=str(raw.get("reference", "")).strip(),
-                   risk_penalty=risk_penalty, filters=filters, weights=weights, rank=rank)
+                   risk_penalty=risk_penalty, filters=filters, weights=weights, rank=rank,
+                   switch=switch, alt_weights=alt_weights, alt_rank=alt_rank)
+
+
+def _scoring(weights_raw: Any, rank_raw: Any, prefix: str
+             ) -> Tuple[Tuple[Tuple[str, float], ...], Tuple[RankField, ...]]:
+    """Validate one scoring method: exactly one of [<prefix>weights] / [[<prefix>rank]]."""
+    weights_raw = weights_raw or {}
+    rank = tuple(_rank(r, i, f"{prefix}rank") for i, r in enumerate(rank_raw or []))
+    if bool(weights_raw) == bool(rank):
+        raise SpecError(f"define exactly one scoring method: [{prefix}weights] or "
+                        f"[[{prefix}rank]]")
+    if not weights_raw:
+        return (), rank
+    if not isinstance(weights_raw, Mapping):
+        raise SpecError(f"{prefix}weights must be a table")
+    bad = set(weights_raw) - set(WEIGHT_FACTORS)
+    if bad:
+        raise SpecError(f"unknown weight factors {sorted(bad)}; use {WEIGHT_FACTORS}")
+    values = {k: _number(v, f"{prefix}weights.{k}") for k, v in weights_raw.items()}
+    if any(v < 0 for v in values.values()) or sum(values.values()) <= 0:
+        raise SpecError(f"{prefix}weights must be non-negative and not all zero")
+    total = sum(values.values())
+    return tuple(sorted((k, v / total) for k, v in values.items() if v > 0)), ()
 
 
 def _number(value: Any, what: str) -> float:
@@ -189,29 +224,30 @@ def _number(value: Any, what: str) -> float:
     return float(value)
 
 
-def _filter(raw: Any, i: int) -> Filter:
+def _filter(raw: Any, i: int, what: str = "filters") -> Filter:
+    where = what if what == "switch" else f"{what}[{i}]"
     if not isinstance(raw, Mapping):
-        raise SpecError(f"filters[{i}] must be a table")
+        raise SpecError(f"{where} must be a table")
     f, op = raw.get("field"), raw.get("op")
     if f not in FIELDS:
-        raise SpecError(f"filters[{i}]: unknown field {f!r}")
+        raise SpecError(f"{where}: unknown field {f!r}")
     if op not in OPS:
-        raise SpecError(f"filters[{i}]: op must be one of {tuple(OPS)}")
-    return Filter(f, op, _number(raw.get("value"), f"filters[{i}].value"))
+        raise SpecError(f"{where}: op must be one of {tuple(OPS)}")
+    return Filter(f, op, _number(raw.get("value"), f"{where}.value"))
 
 
-def _rank(raw: Any, i: int) -> RankField:
+def _rank(raw: Any, i: int, what: str = "rank") -> RankField:
     if not isinstance(raw, Mapping):
-        raise SpecError(f"rank[{i}] must be a table")
+        raise SpecError(f"{what}[{i}] must be a table")
     f = raw.get("field")
     if f not in FIELDS:
-        raise SpecError(f"rank[{i}]: unknown field {f!r}")
+        raise SpecError(f"{what}[{i}]: unknown field {f!r}")
     prefer = raw.get("prefer", "high")
     if prefer not in PREFER:
-        raise SpecError(f"rank[{i}]: prefer must be 'high' or 'low'")
-    weight = _number(raw.get("weight", 1.0), f"rank[{i}].weight")
+        raise SpecError(f"{what}[{i}]: prefer must be 'high' or 'low'")
+    weight = _number(raw.get("weight", 1.0), f"{what}[{i}].weight")
     if weight <= 0:
-        raise SpecError(f"rank[{i}]: weight must be > 0")
+        raise SpecError(f"{what}[{i}]: weight must be > 0")
     return RankField(f, prefer, weight)
 
 
@@ -231,12 +267,23 @@ def to_toml(spec: AgentSpec) -> str:
     for f in spec.filters:
         lines += ["", "[[filters]]", f"field = {_toml_value(f.field)}",
                   f"op = {_toml_value(f.op)}", f"value = {_toml_value(float(f.value))}"]
-    if spec.weights:
-        lines += ["", "[weights]"] + [f"{k} = {_toml_value(v)}" for k, v in spec.weights]
-    for r in spec.rank:
-        lines += ["", "[[rank]]", f"field = {_toml_value(r.field)}",
-                  f"prefer = {_toml_value(r.prefer)}", f"weight = {_toml_value(r.weight)}"]
+    lines += _toml_scoring(spec.weights, spec.rank, "")
+    if spec.switch is not None:
+        s = spec.switch
+        lines += ["", "[switch]", f"field = {_toml_value(s.field)}", f"op = {_toml_value(s.op)}",
+                  f"value = {_toml_value(float(s.value))}"]
+        lines += _toml_scoring(spec.alt_weights, spec.alt_rank, "alt_")
     return "\n".join(lines) + "\n"
+
+
+def _toml_scoring(weights, rank, prefix: str) -> List[str]:
+    lines: List[str] = []
+    if weights:
+        lines += ["", f"[{prefix}weights]"] + [f"{k} = {_toml_value(v)}" for k, v in weights]
+    for r in rank:
+        lines += ["", f"[[{prefix}rank]]", f"field = {_toml_value(r.field)}",
+                  f"prefer = {_toml_value(r.prefer)}", f"weight = {_toml_value(r.weight)}"]
+    return lines
 
 
 def slug(name: str) -> str:

@@ -170,8 +170,8 @@ def test_catalog_rules_and_preview(experiment):
     reg = load_registry()
     cat = an.catalog_frame(experiment, reg)
     assert len(cat) == len(reg.agents)
-    assert set(cat["Source"]) == {"core", "library"}
-    assert set(cat["Method"]) == {"weights", "rank"}
+    assert set(cat["Source"]) == {"core", "library", "meta"}
+    assert set(cat["Method"]) == {"weights", "rank", "switch", "meta"}
 
     spec = AgentSpec.from_dict({
         "name": "Preview Test", "family": "value", "description": "x", "risk_penalty": 0.2,
@@ -188,3 +188,19 @@ def test_catalog_rules_and_preview(experiment):
     loss = replace(s, pe_ratio=-2.0)
     assert "לא עומדת בתנאי" in an.reasoning_spec_he(spec, loss, 0.0, False)
     assert "דירוג לפי" in an.reasoning_spec_he(spec, s, 70.0, True)
+
+
+def test_meta_agent_is_not_a_recommender():
+    from agents.registry import load_registry
+    from engine.experiment import ExperimentParams, run_experiment
+
+    exp = run_experiment(ExperimentParams(seed=5, n_stocks=40, n_periods=6, random_trials=20),
+                         agents=load_registry().agents)
+    ts = exp.dataset.timestamps[-1]
+    assert all("Consensus" not in agents for agents in an.picks_at(exp, ts).values())
+    assert "Consensus" not in set(an.opportunities_frame(exp, ts)["Top Agent"])
+    views = an.agent_views(exp, exp.dataset.tickers[0], ts)
+    text = views.loc[views["Agent"] == "Consensus", "Reasoning"].item()
+    assert "סוכני אסטרטגיה" in text
+    switch = views.loc[views["Agent"] == "Regime Switcher", "Reasoning"].item()
+    assert "מצב שוק" in switch

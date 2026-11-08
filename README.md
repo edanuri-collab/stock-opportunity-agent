@@ -89,6 +89,17 @@ prefer = "low"
 weight = 1.0
 ```
 
+Optional market-regime switch: a `[switch]` condition (e.g. `market_trend > 0`) keeps the main
+scoring while it holds and uses `[alt_weights]` / `[[alt_rank]]` otherwise (see
+`agents/library/regime-switcher.toml`; the builder edits the main scoring only).
+
+Meta-agents (`agents/meta.py`, e.g. **Consensus**) are a separate layer: they run after the
+other agents at the same timestamp and combine their decisions; regular agents never see each
+other, the control agent does not vote, and meta-agents are not counted as recommenders.
+
+The library holds 23 strategies (16 published / well-known with a `reference`, 7 original ideas);
+with the 9 core agents and Consensus that is 33 agents.
+
 A broken file is reported in the dashboard and skipped; it never stops the other agents. Spec
 agents get the same look-ahead tests as the core agents (`tests/test_agent_library.py`). If fewer
 than N stocks pass an agent's filters it holds fewer picks, and none means cash for that month.

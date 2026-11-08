@@ -1,0 +1,21 @@
+name = "Earnings Drift"
+family = "event"
+origin = "known"
+description = "Post-Earnings Announcement Drift: אחרי הפתעת רווחים חיובית המחיר נוטה להמשיך לעלות עוד זמן מה. בוחר את ההפתעות החיוביות הגדולות."
+reference = "Bernard & Thomas, Post-Earnings-Announcement Drift (1989)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "earnings_surprise"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "earnings_surprise"
+prefer = "high"
+weight = 2.0
+
+[[rank]]
+field = "return_1m"
+prefer = "high"
+weight = 1.0

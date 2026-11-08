@@ -1,0 +1,11 @@
+name = "Momentum 12-1"
+family = "momentum"
+origin = "known"
+description = "מומנטום קלאסי: התשואה של 12 החודשים האחרונים בלי החודש האחרון (שנוטה להתהפך). קונה את המנצחות של השנה."
+reference = "Jegadeesh & Titman, Returns to Buying Winners and Selling Losers (1993)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "momentum_12_1"
+prefer = "high"
+weight = 1.0

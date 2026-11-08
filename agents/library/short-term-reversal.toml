@@ -1,0 +1,16 @@
+name = "Short-Term Reversal"
+family = "contrarian"
+origin = "known"
+description = "היפוך לטווח קצר: המפסידות הגדולות של החודש האחרון נוטות לתקן חלק מהירידה. בוחר את המניות שירדו הכי הרבה בחודש האחרון (רק חברות בגודל סביר)."
+reference = "Narasimhan Jegadeesh, Evidence of Predictable Behavior of Security Returns (1990)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "market_cap"
+op = ">="
+value = 1000000000.0
+
+[[rank]]
+field = "return_1m"
+prefer = "low"
+weight = 1.0

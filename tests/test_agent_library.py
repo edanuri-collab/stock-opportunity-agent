@@ -213,4 +213,88 @@ def test_library_agents_stateless_and_deterministic(dataset, library):
         assert vars(a) == {}
         with pytest.raises(TypeError):
             a.weights["value"] = 1.0
-    assert decide(load_registry().agents[9:], snaps, 10) == first
+    fresh = [a for a in load_registry().agents if isinstance(a, SpecAgent)]
+    assert decide(fresh, snaps, 10) == first
+
+
+# ---- market-regime switch ----------------------------------------------------------------
+
+SWITCH = {**BASE, "switch": {"field": "market_trend", "op": ">", "value": 0},
+          "alt_rank": [{"field": "volatility", "prefer": "low"}]}
+
+
+def test_switch_validation():
+    with pytest.raises(SpecError, match=r"need a \[switch\]"):
+        AgentSpec.from_dict({**BASE, "alt_rank": [{"field": "volatility"}]})
+    with pytest.raises(SpecError, match="alt_weights"):
+        AgentSpec.from_dict({**BASE, "switch": {"field": "market_trend", "op": ">", "value": 0}})
+    with pytest.raises(SpecError, match="switch: unknown field"):
+        AgentSpec.from_dict({**SWITCH, "switch": {"field": "nope", "op": ">", "value": 0}})
+    spec = AgentSpec.from_dict(SWITCH)
+    assert spec.method == "switch" and spec.uses_rank
+    assert AgentSpec.from_dict(tomllib.loads(to_toml(spec))) == spec
+
+
+def test_switch_uses_main_or_alternative_scoring(dataset):
+    snaps = dataset.snapshots_at(dataset.timestamps[2])
+    up = [replace(s, market_trend=0.05) for s in snaps]
+    down = [replace(s, market_trend=-0.05) for s in snaps]
+    switcher = build_agent(AgentSpec.from_dict(SWITCH))
+    main_only = build_agent(AgentSpec.from_dict({**BASE, "name": "Main"}))
+    alt_only = build_agent(AgentSpec.from_dict({**BASE, "name": "Alt", "weights": {},
+                                                "rank": SWITCH["alt_rank"]}))
+    score = lambda agent, s: [r["opportunity_score"] for r in agent.analyze_universe(s)]
+    assert score(switcher, up) == score(main_only, up)
+    assert score(switcher, down) == score(alt_only, down)
+    assert "alternative mode" in switcher.analyze_universe(down)[0]["reasoning"]
+
+
+# ---- meta-agents ---------------------------------------------------------------------------
+
+def test_consensus_counts_votes_and_ignores_control(dataset, registry):
+    from agents.meta import ConsensusAgent
+
+    snaps = dataset.snapshots_at(dataset.timestamps[1])
+    agents = [a for a in registry.agents if not getattr(a, "is_meta", False)]
+    base = decide(agents, snaps, 10)
+    with_meta = decide(agents + [ConsensusAgent()], snaps, 10)
+    assert {k: v for k, v in with_meta.items() if k != "Consensus"} == base  # no side effects
+    voters = [a.name for a in agents if a.family != "control"]
+    votes = {}
+    for name in voters:
+        for r in [r for r in base[name] if r["eligible"]][:10]:
+            votes[r["ticker"]] = votes.get(r["ticker"], 0) + 1
+    for r in with_meta["Consensus"]:
+        k = votes.get(r["ticker"], 0)
+        assert int(r["opportunity_score"] * len(voters) / 100 + 1e-9) == k
+        assert r["eligible"] == (k >= 2)
+        assert f"picked by {k} of {len(voters)}" in r["reasoning"]
+
+
+def test_consensus_is_registered_and_cannot_analyze_alone(registry, dataset):
+    meta = next(a for a in registry.agents if a.name == "Consensus")
+    assert registry.sources["Consensus"] == "meta" and vars(meta) == {}
+    with pytest.raises(TypeError):
+        meta.analyze(dataset.snapshots_at(dataset.timestamps[0])[0])
+
+
+@pytest.mark.parametrize("index", [0, 5])
+def test_consensus_unchanged_by_future(dataset, registry, index):
+    import random
+
+    cutoff = dataset.timestamps[index]
+    rng = random.Random(1)
+    snaps = [s if s.timestamp <= cutoff else replace(s, price=s.price * 9, momentum=5.0,
+                                                     roe=0.9, market_trend=0.5)
+             for ts in dataset.timestamps for s in dataset.snapshots_at(ts)]
+    tampered = MarketDataset(snaps, {(s.ticker, s.timestamp): rng.uniform(-1, 5) for s in snaps},
+                             {ts: "bull" for ts in dataset.timestamps})
+    assert decide(registry.agents, tampered.snapshots_at(cutoff), 10) == \
+           decide(registry.agents, dataset.snapshots_at(cutoff), 10)
+
+
+def test_library_size_and_balance(library):
+    known = [a for a in library if a.origin == "known"]
+    original = [a for a in library if a.origin == "original"]
+    assert len(library) >= 22 and len(known) >= 15 and len(original) >= 5
+    assert len({a.family for a in library}) >= 8

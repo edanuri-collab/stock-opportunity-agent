@@ -1,0 +1,26 @@
+name = "Piotroski F-Score"
+family = "quality"
+origin = "known"
+description = "ציון F של ג'וזף פיוטרוסקי: בין מניות זולות ביחס להון, בוחר את אלה שהנתונים הפיננסיים שלהן משתפרים (רווחיות, תזרים, חוב, שולי רווח). כאן נעשה שימוש בציון מקורב 0-7."
+reference = "Joseph Piotroski, Value Investing: The Use of Historical Financial Statement Information (2000)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "price_to_book"
+op = "<="
+value = 2.0
+
+[[filters]]
+field = "f_score"
+op = ">="
+value = 5.0
+
+[[rank]]
+field = "f_score"
+prefer = "high"
+weight = 2.0
+
+[[rank]]
+field = "price_to_book"
+prefer = "low"
+weight = 1.0

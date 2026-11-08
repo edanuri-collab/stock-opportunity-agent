@@ -1,0 +1,31 @@
+name = "Turnaround"
+family = "quality"
+origin = "original"
+description = "רעיון חדש: חברות שהעסק שלהן משתפר מכל הכיוונים בשנה האחרונה - ROE עולה, שולי רווח עולים וחוב יורד - כשהשוק עוד לא תמחר את זה במלואו (מכפיל הון נמוך)."
+reference = ""
+risk_penalty = 0.0
+
+[[filters]]
+field = "roe_change"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "gross_margin_change"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "debt_change"
+op = "<"
+value = 0.0
+
+[[rank]]
+field = "roe_change"
+prefer = "high"
+weight = 2.0
+
+[[rank]]
+field = "price_to_book"
+prefer = "low"
+weight = 1.0

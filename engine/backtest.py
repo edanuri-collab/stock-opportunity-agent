@@ -45,14 +45,27 @@ def _next_month_end(ts: datetime) -> datetime:
 def decide(
     agents: Sequence[BaseAgent], snapshots: Sequence[StockSnapshot], top_n: int
 ) -> Dict[str, List[AgentResult]]:
-    """Every agent analyses the SAME snapshots. Receives no outcome data by construction."""
+    """Every agent analyses the SAME snapshots. Receives no outcome data by construction.
+
+    Meta-agents run afterwards, on the decisions of the non-control agents of this timestamp.
+    """
     decisions: Dict[str, List[AgentResult]] = {}
+    metas = [a for a in agents if getattr(a, "is_meta", False)]
     for agent in agents:
+        if getattr(agent, "is_meta", False):
+            continue
         universe = getattr(agent, "analyze_universe", None)  # cross-sectional agents
         results = list(universe(snapshots)) if universe else [agent.analyze(s) for s in snapshots]
         results.sort(key=lambda r: (-r["opportunity_score"], r["ticker"]))
         decisions[agent.name] = results
-    return decisions
+    if metas:
+        voters = {a.name: decisions[a.name] for a in agents
+                  if not getattr(a, "is_meta", False) and getattr(a, "family", "") != "control"}
+        for meta in metas:
+            results = meta.combine(voters, top_n)
+            results.sort(key=lambda r: (-r["opportunity_score"], r["ticker"]))
+            decisions[meta.name] = results
+    return {a.name: decisions[a.name] for a in agents}  # keep the agents' order
 
 
 def run_backtest(

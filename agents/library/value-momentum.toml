@@ -1,0 +1,16 @@
+name = "Value + Momentum"
+family = "multi_factor"
+origin = "known"
+description = "שילוב ערך ומומנטום: שני גורמים עם קורלציה שלילית זה לזה, ולכן השילוב יציב יותר מכל אחד לבד. זול ביחס להון וגם במגמה חיובית."
+reference = "Asness, Moskowitz & Pedersen, Value and Momentum Everywhere (2013)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "price_to_book"
+prefer = "low"
+weight = 1.0
+
+[[rank]]
+field = "momentum_12_1"
+prefer = "high"
+weight = 1.0

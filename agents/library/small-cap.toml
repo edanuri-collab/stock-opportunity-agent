@@ -1,0 +1,16 @@
+name = "Small Cap"
+family = "size"
+origin = "known"
+description = "אפקט הגודל: חברות קטנות השיגו היסטורית תשואה עודפת (בתמורה לסיכון גבוה יותר). בוחר את החברות הקטנות ביותר שהן רווחיות."
+reference = "Rolf Banz, The Relationship Between Return and Market Value (1981)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "roe"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "market_cap"
+prefer = "low"
+weight = 1.0

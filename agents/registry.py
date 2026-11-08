@@ -16,6 +16,7 @@ from typing import Dict, List, Sequence, Tuple
 from agents import default_agents
 from agents.base_agent import BaseAgent
 from agents.configurable import build_agent
+from agents.meta import meta_agents
 from agents.spec import AgentSpec, SpecError, slug, to_toml
 
 AGENTS_DIR = Path(__file__).resolve().parent
@@ -59,6 +60,9 @@ def load_registry(dirs: Sequence[Path] = SPEC_DIRS) -> Registry:
             continue
         reg.agents.append(build_agent(spec))
         reg.sources[spec.name] = path.parent.name
+    for meta in meta_agents():
+        reg.agents.append(meta)
+        reg.sources[meta.name] = "meta"
     return reg
 
 

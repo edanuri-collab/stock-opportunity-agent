@@ -1,0 +1,21 @@
+name = "Deep Value"
+family = "value"
+origin = "known"
+description = "ערך עמוק: המניות הזולות ביותר לפי שילוב של מכפיל הון, מכפיל מכירות ותשואת רווח."
+reference = "Fama & French (1992); Lakonishok, Shleifer & Vishny (1994)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "price_to_book"
+prefer = "low"
+weight = 1.0
+
+[[rank]]
+field = "price_to_sales"
+prefer = "low"
+weight = 1.0
+
+[[rank]]
+field = "earnings_yield"
+prefer = "high"
+weight = 1.0

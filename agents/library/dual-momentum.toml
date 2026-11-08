@@ -1,0 +1,21 @@
+name = "Dual Momentum"
+family = "momentum"
+origin = "known"
+description = "מומנטום כפול של גארי אנטונאצ'י: נכנס רק כשהשוק עצמו במגמה חיובית (מומנטום מוחלט), ובוחר את המניות החזקות ביותר (מומנטום יחסי). כשהשוק יורד - נשאר במזומן."
+reference = "Gary Antonacci, Dual Momentum Investing (2014)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "market_trend"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "momentum_12_1"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "momentum_12_1"
+prefer = "high"
+weight = 1.0

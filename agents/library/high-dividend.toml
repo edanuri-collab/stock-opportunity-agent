@@ -1,0 +1,26 @@
+name = "High Dividend"
+family = "value"
+origin = "known"
+description = "תשואת דיבידנד גבוהה עם מאזן סביר, בהשראת 'Dogs of the Dow'. מנסה להימנע ממלכודות דיבידנד בעזרת סינון חוב ורווחיות."
+reference = "Michael O'Higgins, Beating the Dow (1991)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "dividend_yield"
+op = ">"
+value = 0.0
+
+[[filters]]
+field = "debt_to_equity"
+op = "<="
+value = 1.5
+
+[[filters]]
+field = "roe"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "dividend_yield"
+prefer = "high"
+weight = 1.0

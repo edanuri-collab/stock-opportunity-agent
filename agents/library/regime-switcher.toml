@@ -1,0 +1,30 @@
+name = "Regime Switcher"
+family = "multi_factor"
+origin = "original"
+description = "רעיון חדש: מחליף אסטרטגיה לפי מצב השוק. כשמגמת השוק חיובית - מומנטום ואיכות. כשהיא שלילית - עובר להגנה: בטא נמוכה, ROE גבוה וחוב נמוך."
+reference = ""
+risk_penalty = 0.0
+
+[weights]
+momentum = 0.7
+quality = 0.3
+
+[switch]
+field = "market_trend"
+op = ">"
+value = 0.0
+
+[[alt_rank]]
+field = "beta"
+prefer = "low"
+weight = 1.0
+
+[[alt_rank]]
+field = "roe"
+prefer = "high"
+weight = 1.0
+
+[[alt_rank]]
+field = "debt_to_equity"
+prefer = "low"
+weight = 1.0

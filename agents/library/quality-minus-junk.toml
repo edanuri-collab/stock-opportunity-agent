@@ -1,0 +1,31 @@
+name = "Quality Minus Junk"
+family = "quality"
+origin = "known"
+description = "גורם האיכות של AQR: רווחיות גבוהה, צמיחה, ביטחון (חוב ובטא נמוכים). קונה את החברות האיכותיות ביותר."
+reference = "Asness, Frazzini & Pedersen, Quality Minus Junk (2019)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "roe"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "gross_margin"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "earnings_growth"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "debt_to_equity"
+prefer = "low"
+weight = 1.0
+
+[[rank]]
+field = "beta"
+prefer = "low"
+weight = 1.0

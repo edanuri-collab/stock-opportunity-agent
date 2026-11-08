@@ -1,0 +1,11 @@
+name = "Low Beta"
+family = "low_risk"
+origin = "known"
+description = "Betting Against Beta: מניות עם רגישות נמוכה לשוק השיגו היסטורית תשואה מותאמת סיכון טובה יותר מהצפוי. בוחר את הבטא הנמוכה ביותר."
+reference = "Frazzini & Pedersen, Betting Against Beta (2014)"
+risk_penalty = 0.0
+
+[[rank]]
+field = "beta"
+prefer = "low"
+weight = 1.0

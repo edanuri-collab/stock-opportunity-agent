@@ -6,10 +6,10 @@ attributes, so instances stay stateless exactly like the core agents.
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import ClassVar, List, Sequence
+from typing import ClassVar, List, Mapping, Sequence, Tuple
 
 from agents.base_agent import AgentResult, BaseAgent
-from agents.spec import AgentSpec, field_value, percentile_ranks, slug
+from agents.spec import AgentSpec, RankField, field_value, percentile_ranks, slug
 from data.models import StockSnapshot
 from engine.scoring import clamp, compute_components, top_factors, weighted_opportunity
 
@@ -32,20 +32,27 @@ class SpecAgent(BaseAgent):
     # ---- scoring ---------------------------------------------------------------------
 
     def analyze(self, stock: StockSnapshot) -> AgentResult:
-        if self.spec.rank:
+        if self.spec.uses_rank:
             raise TypeError(f"{self.name} ranks across stocks: use analyze_universe()")
         return self.analyze_universe([stock])[0]
 
-    def analyze_universe(self, stocks: Sequence[StockSnapshot]) -> List[AgentResult]:
-        comps = [compute_components(s) for s in stocks]
-        failed = [self.failed_filters(s) for s in stocks]
-        eligible = [i for i, f in enumerate(failed) if not f]
+    def uses_main(self, stock: StockSnapshot) -> bool:
+        """True when the main scoring applies (no switch, or the switch condition holds)."""
+        return self.spec.switch is None or self.spec.switch.passes(stock)
+
+    def method_for(self, stock: StockSnapshot
+                   ) -> Tuple[Mapping[str, float], Tuple[RankField, ...]]:
+        if self.uses_main(stock):
+            return self.spec.weights_map, self.spec.rank
+        return self.spec.alt_weights_map, self.spec.alt_rank
+
+    def _scores(self, stocks, comps, eligible, weights, rank) -> List[float]:
         scores = [0.0] * len(stocks)
-        if self.spec.rank:
+        if rank:
             if eligible:
-                total = sum(r.weight for r in self.spec.rank)
+                total = sum(r.weight for r in rank)
                 combined = [0.0] * len(eligible)
-                for r in self.spec.rank:
+                for r in rank:
                     pct = percentile_ranks([field_value(stocks[i], r.field) for i in eligible])
                     if r.prefer == "low":
                         pct = [100.0 - p for p in pct]
@@ -54,22 +61,40 @@ class SpecAgent(BaseAgent):
                     scores[i] = clamp(c - self.risk_penalty * comps[i].risk)
         else:
             for i in eligible:
-                scores[i] = weighted_opportunity(comps[i], self.weights, self.risk_penalty)
+                scores[i] = weighted_opportunity(comps[i], weights, self.risk_penalty)
+        return scores
+
+    def analyze_universe(self, stocks: Sequence[StockSnapshot]) -> List[AgentResult]:
+        comps = [compute_components(s) for s in stocks]
+        failed = [self.failed_filters(s) for s in stocks]
+        eligible = [i for i, f in enumerate(failed) if not f]
+        spec = self.spec
+        main = self._scores(stocks, comps, eligible, spec.weights_map, spec.rank)
+        if spec.switch is None:
+            scores = main
+        else:
+            alt = self._scores(stocks, comps, eligible, spec.alt_weights_map, spec.alt_rank)
+            scores = [m if self.uses_main(s) else a for s, m, a in zip(stocks, main, alt)]
         return [self._result(s, c, score, not f, f)
                 for s, c, score, f in zip(stocks, comps, scores, failed)]
 
     def _result(self, stock, comps, score, eligible, failed) -> AgentResult:
+        weights, rank = self.method_for(stock)
+        mode = ""
+        if self.spec.switch is not None:
+            mode = " (main mode)" if self.uses_main(stock) else " (alternative mode)"
         if not eligible:
             reasoning = (f"{self.name} filters out {stock.ticker}: fails "
                          f"{', '.join(failed)}.")
-        elif self.spec.rank:
+        elif rank:
             facts = ", ".join(f"{r.field} {field_value(stock, r.field):.3g} ({r.prefer} preferred)"
-                              for r in self.spec.rank)
-            reasoning = f"{self.name} scores {stock.ticker} {score:.1f}/100 by rank. {facts}."
+                              for r in rank)
+            reasoning = (f"{self.name} scores {stock.ticker} {score:.1f}/100 by rank{mode}. "
+                         f"{facts}.")
         else:
             cd = comps.as_dict()
-            drivers = ", ".join(f"{f} {cd[f]:.0f}" for f in top_factors(comps, self.weights, 2))
-            reasoning = (f"{self.name} scores {stock.ticker} {score:.1f}/100. "
+            drivers = ", ".join(f"{f} {cd[f]:.0f}" for f in top_factors(comps, weights, 2))
+            reasoning = (f"{self.name} scores {stock.ticker} {score:.1f}/100{mode}. "
                          f"Main drivers: {drivers}.")
         return {
             "ticker": stock.ticker, "agent": self.name,

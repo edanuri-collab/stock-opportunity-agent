@@ -6,6 +6,7 @@ format and lay out what these functions return.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
@@ -34,6 +35,15 @@ FACTOR_LABELS = ("value", "quality", "momentum", "catalyst", "breakout", "squeez
 
 def is_control(agent: str) -> bool:
     return agent in CONTROL_AGENTS
+
+
+def is_meta(agent: Optional[BaseAgent]) -> bool:
+    return bool(getattr(agent, "is_meta", False))
+
+
+def _not_voting(exp: Experiment) -> set:
+    """Agents that are not counted as recommenders: the control and the meta-agents."""
+    return set(CONTROL_AGENTS) | {a.name for a in exp.agents if is_meta(a)}
 
 
 def strategy_agents(exp: Experiment) -> List[str]:
@@ -90,8 +100,9 @@ def data_source_status(exp: Experiment) -> DataSourceStatus:
 def picks_at(exp: Experiment, timestamp: datetime) -> Dict[str, List[str]]:
     """ticker -> strategy agents that hold it in their top-N at ``timestamp``."""
     out: Dict[str, List[str]] = {}
+    skip = _not_voting(exp)
     for t in exp.backtest.trades:
-        if t.timestamp == timestamp and not is_control(t.agent):
+        if t.timestamp == timestamp and t.agent not in skip:
             out.setdefault(t.ticker, []).append(t.agent)
     return out
 
@@ -163,7 +174,7 @@ def opportunities_frame(exp: Experiment, timestamp: datetime,
     """One row per stock at ``timestamp``: factor scores, best strategy-agent score, picks."""
     scores = scores if scores is not None else scores_frame(exp)
     at = scores[(scores["timestamp"] == timestamp.isoformat())
-                & ~scores["agent"].isin(CONTROL_AGENTS)]
+                & ~scores["agent"].isin(_not_voting(exp))]
     best = (at.sort_values(["opportunity_score", "agent"], ascending=[False, True])
               .drop_duplicates("ticker").set_index("ticker"))
     picks = picks_at(exp, timestamp)
@@ -257,7 +268,7 @@ def agent_views(exp: Experiment, ticker: str, timestamp: datetime,
              "Opportunity Score": r.opportunity_score, "Rank": f"{int(r.rank)} / {universe}",
              "Picked": r.agent in held,
              "Reasoning": reasoning_he(r.agent, snap, r.opportunity_score,
-                                       agents.get(r.agent), r.eligible)}
+                                       agents.get(r.agent), r.eligible, r.reasoning)}
             for r in mine.itertuples()]
     return pd.DataFrame(rows).sort_values(["Opportunity Score", "Agent"],
                                           ascending=[False, True]).reset_index(drop=True)
@@ -311,8 +322,15 @@ _FACTOR_FACTS = {
 
 
 def reasoning_he(agent: str, s: StockSnapshot, score: float,
-                 cfg: Optional[BaseAgent] = None, eligible: bool = True) -> str:
+                 cfg: Optional[BaseAgent] = None, eligible: bool = True,
+                 english: str = "") -> str:
     """Hebrew explanation built from the same components and weights the agent used."""
+    if is_meta(cfg):
+        votes = re.search(r"picked by (\d+) of (\d+)", english)
+        k, n = (votes.group(1), votes.group(2)) if votes else ("?", "?")
+        verdict = "" if eligible else " פחות משני סוכנים בחרו בה, ולכן היא לא נבחרת."
+        return (f"{ltr(agent)}: {ltr(k)} מתוך {ltr(n)} סוכני אסטרטגיה מחזיקים את "
+                f"{ltr(s.ticker)} ב-Top שלהם.{verdict}")
     if getattr(cfg, "spec", None) is not None:
         return reasoning_spec_he(cfg.spec, s, score, eligible)
     if is_control(agent):
@@ -440,17 +458,25 @@ def filter_he(f: Filter) -> str:
     return f"{he.FIELDS[f.field]} {ltr(f'{he.OPS[f.op]} {format_field(f.field, f.value)}')}"
 
 
+def _scoring_he(weights, rank) -> List[str]:
+    if rank:
+        total = sum(r.weight for r in rank)
+        return [f"דירוג: {he.FIELDS[r.field]}, {he.PREFER[r.prefer]} "
+                f"(משקל {ltr(f'{r.weight / total:.0%}')})" for r in rank]
+    ordered = sorted(weights, key=lambda kv: -kv[1])
+    return ["שקלול גורמים: " + ", ".join(f"{FACTOR_HE[k]} {ltr(f'{v:.0%}')}"
+                                       for k, v in ordered)]
+
+
 def rules_he(spec: AgentSpec) -> List[str]:
     """The agent's rules as short Hebrew lines (for the catalog)."""
     lines = [f"תנאי סינון: {filter_he(f)}" for f in spec.filters]
-    if spec.rank:
-        total = sum(r.weight for r in spec.rank)
-        lines += [f"דירוג: {he.FIELDS[r.field]}, {he.PREFER[r.prefer]} "
-                  f"(משקל {ltr(f'{r.weight / total:.0%}')})" for r in spec.rank]
+    if spec.switch is None:
+        lines += _scoring_he(spec.weights, spec.rank)
     else:
-        ordered = sorted(spec.weights, key=lambda kv: -kv[1])
-        lines.append("שקלול גורמים: " + ", ".join(f"{FACTOR_HE[k]} {ltr(f'{v:.0%}')}"
-                                                for k, v in ordered))
+        lines += [f"כאשר {filter_he(spec.switch)}: " + line
+                  for line in _scoring_he(spec.weights, spec.rank)]
+        lines += ["אחרת: " + line for line in _scoring_he(spec.alt_weights, spec.alt_rank)]
     if spec.risk_penalty:
         lines.append(f"קנס סיכון: {ltr(f'{spec.risk_penalty:.2f}')} מציון הסיכון")
     return lines
@@ -464,20 +490,29 @@ def reasoning_spec_he(spec: AgentSpec, s: StockSnapshot, score: float, eligible:
     text = f"{who} נותן ל-{ltr(s.ticker)} ציון {ltr(f'{score:.1f}/100')}."
     if spec.filters:
         text += f" עוברת את כל {len(spec.filters)} תנאי הסינון."
-    if spec.rank:
+    weights, rank = spec.weights_map, spec.rank
+    if spec.switch is not None:
+        if spec.switch.passes(s):
+            text += f" מצב שוק: {filter_he(spec.switch)} מתקיים, ולכן פועלת השיטה הראשית."
+        else:
+            text += f" מצב שוק: {filter_he(spec.switch)} לא מתקיים, ולכן פועלת השיטה החלופית."
+            weights, rank = spec.alt_weights_map, spec.alt_rank
+    if rank:
         text += " דירוג לפי: " + ", ".join(
             f"{he.FIELDS[r.field]} {ltr(format_field(r.field, field_value(s, r.field)))} "
-            f"({he.PREFER[r.prefer]})" for r in spec.rank) + "."
+            f"({he.PREFER[r.prefer]})" for r in rank) + "."
     else:
         comps = compute_components(s)
         cd = comps.as_dict()
-        drivers = top_factors(comps, spec.weights_map, 2)
+        drivers = top_factors(comps, weights, 2)
         text += " גורמים מובילים: " + ", ".join(f"{FACTOR_HE[f]} {cd[f]:.0f}"
                                               for f in drivers) + "."
     return text
 
 
 def method_of(agent: BaseAgent) -> str:
+    if is_meta(agent):
+        return "meta"
     spec = getattr(agent, "spec", None)
     return spec.method if spec is not None else "weights"
 

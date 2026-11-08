@@ -1,0 +1,36 @@
+name = "Buffett Quality"
+family = "quality"
+origin = "known"
+description = "בהשראת וורן באפט: עסקים איכותיים ורווחיים עם תשואה גבוהה על ההון, חוב נמוך ושולי רווח גבוהים, במחיר סביר."
+reference = "Frazzini, Kabiller & Pedersen, Buffett's Alpha (2018)"
+risk_penalty = 0.0
+
+[[filters]]
+field = "roe"
+op = ">="
+value = 0.15
+
+[[filters]]
+field = "debt_to_equity"
+op = "<="
+value = 0.6
+
+[[filters]]
+field = "pe_ratio"
+op = ">"
+value = 0.0
+
+[[rank]]
+field = "roic"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "gross_margin"
+prefer = "high"
+weight = 1.0
+
+[[rank]]
+field = "earnings_yield"
+prefer = "high"
+weight = 1.0
