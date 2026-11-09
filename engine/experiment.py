@@ -36,10 +36,13 @@ class ExperimentParams:
     random_trials: int = 200
     rank_by: str = "alpha"
     signal: SignalConfig = field(default_factory=SignalConfig)
+    cost_bps: float = 10.0   # commission + slippage per side, in basis points
 
     def __post_init__(self) -> None:
         if self.rank_by not in RANK_KEYS:
             raise ValueError(f"rank_by must be one of {RANK_KEYS}")
+        if self.cost_bps < 0:
+            raise ValueError("cost_bps must be >= 0")
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -112,8 +115,10 @@ def run_experiment(
     if dataset is None:
         dataset = generate_dataset(params.n_stocks, params.n_periods, params.seed,
                                    signal=params.signal)
-    backtest = run_backtest(dataset, agents, top_n=params.top_n)             # decisions + trades
-    benchmarks = compute_benchmarks(dataset, params.top_n, params.seed, params.random_trials)
+    backtest = run_backtest(dataset, agents, top_n=params.top_n,           # decisions + trades
+                            cost_bps=params.cost_bps)
+    benchmarks = compute_benchmarks(dataset, params.top_n, params.seed, params.random_trials,
+                                    cost_bps=params.cost_bps)
     metrics = compute_agent_metrics(backtest, benchmarks, params.rank_by)   # metrics + ranking
 
     versions = {a.name: agent_version(a) for a in agents}

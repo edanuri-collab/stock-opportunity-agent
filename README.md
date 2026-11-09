@@ -104,6 +104,27 @@ A broken file is reported in the dashboard and skipped; it never stops the other
 agents get the same look-ahead tests as the core agents (`tests/test_agent_library.py`). If fewer
 than N stocks pass an agent's filters it holds fewer picks, and none means cash for that month.
 
+## Fair ranking (`engine/robustness.py`, dashboard screen "Fair Ranking")
+
+- **Trading costs**: `cost_bps` (default 10, commission + slippage per side, `SOA_COST_BPS`) is
+  charged on every unit bought or sold; monthly turnover and total cost are reported per agent.
+  Random portfolios pay the same costs; Market and Buy & Hold barely trade and are modelled
+  without costs.
+- **Multiple testing**: alpha p-values use the Student-t distribution (`engine/stats.py`, no
+  scipy) and are Holm-corrected across all agents; the leaderboard status uses the corrected value.
+- **Monte Carlo**: every agent runs on many independent synthetic worlds; an agent has a
+  *robust edge* only if its mean alpha across worlds is positive after Holm correction. A run
+  with the null signal is the false-positive control (`tests/test_robustness.py`).
+- **In-sample / out-of-sample**: each world is split in half; the rank correlation of agents'
+  alpha between halves shows whether a single run's ranking carries information.
+- **Walk-forward selection**: each month follow the agent with the best trailing 12 months and
+  take its next month; compared with holding all strategies equally.
+- **Comparable opportunity scores**: each agent's scores become percentiles within that agent
+  before averaging, because a ranking agent always gives its best stock 100.
+
+All of this runs on synthetic data, where every strategy concept has the same weak positive
+loading by design: it validates the method, it does not tell which strategy works in real markets.
+
 ## Synthetic data: signal is separate from outcome
 
 Each month, features at time T are noisy observations of hidden state and of the price path up to T.

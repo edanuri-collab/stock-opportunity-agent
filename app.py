@@ -17,7 +17,7 @@ from dashboard import theme
 from dashboard.context import PAGES, DashboardContext, build_context
 from dashboard.views import (
     catalog, experiments, fmt_date, leaderboard, opportunities, overview, performance,
-    stock_detail,
+    robustness, stock_detail,
 )
 from data.sample_data import SignalConfig
 from engine.evaluation import RANK_KEYS
@@ -30,13 +30,15 @@ theme.inject_css()
 VIEWS = {
     "Overview": overview, "Agents Leaderboard": leaderboard, "Agent Catalog": catalog,
     "Stock Opportunities": opportunities, "Stock Detail": stock_detail,
-    "Performance & Backtesting": performance, "Experiments": experiments,
+    "Performance & Backtesting": performance, "Fair Ranking": robustness,
+    "Experiments": experiments,
 }
 ICONS = {"Overview": ":material/dashboard:", "Agents Leaderboard": ":material/leaderboard:",
          "Agent Catalog": ":material/smart_toy:",
          "Stock Opportunities": ":material/manage_search:",
          "Stock Detail": ":material/query_stats:",
          "Performance & Backtesting": ":material/show_chart:",
+         "Fair Ranking": ":material/balance:",
          "Experiments": ":material/science:"}
 
 
@@ -70,6 +72,9 @@ with st.sidebar:
         top_n = st.slider("בחירות לכל סוכן (Top N)", 1, 30, min(max(defaults.top_n, 1), 30))
         trials = st.slider("מספר תיקים אקראיים להשוואה", 20, 1000,
                            min(max(defaults.random_trials, 20), 1000))
+        cost_bps = st.slider("עמלה + החלקה (נקודות בסיס לכל צד)", 0, 50,
+                             min(max(defaults.cost_bps, 0), 50),
+                             help="10 = 0.1% על כל קנייה ועל כל מכירה. מנוכה לפי מחזור התיק.")
         rank_by = st.selectbox("דירוג הסוכנים לפי", RANK_KEYS, index=0,
                                format_func=lambda k: he.RANK_KEYS.get(k, k))
         mode = st.radio("סיגנל סינתטי", ["weak", "null"],
@@ -82,8 +87,11 @@ params = ExperimentParams(
     seed=int(seed), n_stocks=int(n_stocks), n_periods=int(n_periods), top_n=int(top_n),
     random_trials=int(trials), rank_by=rank_by,
     signal=SignalConfig.null() if mode == "null" else SignalConfig(),
+    cost_bps=float(cost_bps),
 )
-ctx = load(params, defaults.experiment_dir, fingerprint())
+agents_version = fingerprint()
+ctx = load(params, defaults.experiment_dir, agents_version)
+ctx.params, ctx.agents_version = params, agents_version
 
 with st.sidebar:
     status = ctx.status

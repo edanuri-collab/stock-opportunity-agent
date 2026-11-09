@@ -22,6 +22,7 @@ class Settings:
     n_periods: int = 24
     top_n: int = 10
     random_trials: int = 200
+    cost_bps: int = 10
     experiment_dir: str = "experiments"
 
     @classmethod
@@ -33,5 +34,6 @@ class Settings:
             n_periods=_int_from_env("SOA_N_PERIODS", d.n_periods),
             top_n=_int_from_env("SOA_TOP_N", d.top_n),
             random_trials=_int_from_env("SOA_RANDOM_TRIALS", d.random_trials),
+            cost_bps=_int_from_env("SOA_COST_BPS", d.cost_bps),
             experiment_dir=os.environ.get("SOA_EXPERIMENT_DIR") or d.experiment_dir,
         )

@@ -15,7 +15,7 @@ def test_trade_counts(result, dataset):
 
 
 def test_deterministic(dataset, result):
-    again = run_backtest(dataset, default_agents(), top_n=10)
+    again = run_backtest(dataset, default_agents(), top_n=10, cost_bps=result.cost_bps)
     assert again.period_returns == result.period_returns
     assert again.scores == result.scores
 
@@ -66,3 +66,24 @@ def test_invalid_inputs(dataset, agents):
         run_backtest(dataset, agents, top_n=0)
     with pytest.raises(ValueError):
         run_backtest(dataset, [agents[0], agents[0]], top_n=3)
+
+
+def test_trading_costs_follow_turnover(dataset):
+    from engine.backtest import rebalance_cost
+
+    assert rebalance_cost({}, {"A": 0.5, "B": 0.5}, 10) == pytest.approx((1.0, 0.001))  # buy all
+    assert rebalance_cost({"A": 0.5, "B": 0.5}, {"A": 0.5, "C": 0.5}, 10) ==         pytest.approx((0.5, 0.001))                                            # swap one name
+    assert rebalance_cost({"A": 1.0}, {}, 10) == pytest.approx((1.0, 0.001))  # sell to cash
+    assert rebalance_cost({"A": 1.0}, {"A": 1.0}, 10) == (0.0, 0.0)
+    agents = default_agents()[:2]
+    free = run_backtest(dataset, agents, top_n=10)
+    costly = run_backtest(dataset, agents, top_n=10, cost_bps=25)
+    for a in agents:
+        gross = free.period_returns[a.name]
+        net = costly.period_returns[a.name]
+        assert all(n <= g for n, g in zip(net, gross))
+        assert costly.turnover[a.name][0] == pytest.approx(1.0)  # first month: full buy
+        assert [g - n for g, n in zip(gross, net)] == pytest.approx(costly.costs[a.name])
+        assert costly.scores == free.scores  # costs never change decisions
+    with pytest.raises(ValueError):
+        run_backtest(dataset, agents, top_n=10, cost_bps=-1)

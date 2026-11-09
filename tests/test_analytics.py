@@ -204,3 +204,19 @@ def test_meta_agent_is_not_a_recommender():
     assert "סוכני אסטרטגיה" in text
     switch = views.loc[views["Agent"] == "Regime Switcher", "Reasoning"].item()
     assert "מצב שוק" in switch
+
+
+def test_corrected_significance_and_normalised_scores(experiment):
+    adjusted = an.adjusted_pvalues(experiment)
+    raw = {m.agent: m.alpha["Market (S&P proxy)"].p_value for m in experiment.metrics}
+    assert "Random Agent" not in adjusted
+    assert all(adjusted[a] >= raw[a] - 1e-12 for a in adjusted)
+    lb = an.agent_leaderboard(experiment)
+    assert {"Adjusted p", "Turnover", "Cost"} <= set(lb.columns)
+    assert an.corrected_status(3.0, 0.01) == "Outperforming"
+    assert an.corrected_status(3.0, 0.2) == "Inconclusive"
+    assert an.corrected_status(-3.0, 0.01) == "Underperforming"
+    opp = an.opportunities_frame(experiment, experiment.dataset.timestamps[-1])
+    assert opp["Opportunity Score"].between(0, 100).all()
+    assert opp["Opportunity Score"].max() < 100  # an average of percentiles, not a single 100
+    assert opp["Opportunity Score"].nunique() > len(opp) * 0.8

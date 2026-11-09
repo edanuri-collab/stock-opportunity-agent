@@ -4,7 +4,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Tuple
 
 from agents.base_agent import AgentResult, BaseAgent
 from data.models import MarketDataset, StockSnapshot
@@ -27,7 +27,10 @@ class BacktestResult:
     regimes: List[str] = field(default_factory=list)
     scores: List[AgentResult] = field(default_factory=list)
     trades: List[Trade] = field(default_factory=list)
-    period_returns: Dict[str, List[float]] = field(default_factory=dict)
+    period_returns: Dict[str, List[float]] = field(default_factory=dict)  # after costs
+    turnover: Dict[str, List[float]] = field(default_factory=dict)  # share of portfolio traded
+    costs: Dict[str, List[float]] = field(default_factory=dict)     # cost deducted per period
+    cost_bps: float = 0.0
 
     def equity_curve(self, agent: str) -> List[float]:
         equity, curve = 1.0, []
@@ -68,17 +71,34 @@ def decide(
     return {a.name: decisions[a.name] for a in agents}  # keep the agents' order
 
 
+def rebalance_cost(old: Dict[str, float], new: Dict[str, float], cost_bps: float
+                   ) -> Tuple[float, float]:
+    """(one-way turnover, cost as a fraction of the portfolio) of moving from old to new
+    weights. ``cost_bps`` is charged on every unit bought or sold (commission + slippage)."""
+    names = set(old) | set(new)
+    buys = sum(max(new.get(t, 0.0) - old.get(t, 0.0), 0.0) for t in names)
+    sells = sum(max(old.get(t, 0.0) - new.get(t, 0.0), 0.0) for t in names)
+    return max(buys, sells), (buys + sells) * cost_bps / 10_000
+
+
 def run_backtest(
-    dataset: MarketDataset, agents: Sequence[BaseAgent], top_n: int = 10
+    dataset: MarketDataset, agents: Sequence[BaseAgent], top_n: int = 10,
+    cost_bps: float = 0.0,
 ) -> BacktestResult:
-    """Each period: snapshots -> agents -> top-N equal-weight picks -> realised return."""
+    """Each period: snapshots -> agents -> top-N equal-weight picks -> realised return,
+    minus trading costs for the change of holdings (``cost_bps`` per side)."""
     if top_n < 1:
         raise ValueError("top_n must be >= 1")
     names = [a.name for a in agents]
     if len(set(names)) != len(names):
         raise ValueError("Agent names must be unique")
+    if cost_bps < 0:
+        raise ValueError("cost_bps must be >= 0")
 
-    result = BacktestResult(top_n=top_n, period_returns={n: [] for n in names})
+    result = BacktestResult(top_n=top_n, period_returns={n: [] for n in names},
+                            turnover={n: [] for n in names}, costs={n: [] for n in names},
+                            cost_bps=cost_bps)
+    holdings: Dict[str, Dict[str, float]] = {n: {} for n in names}
     for ts in dataset.timestamps:
         snapshots = dataset.snapshots_at(ts)
         decisions = decide(agents, snapshots, top_n)  # 1) decisions, outcomes not touched
@@ -91,7 +111,13 @@ def run_backtest(
             for r, ret in zip(picks, returns):
                 result.trades.append(Trade(ts, name, r["ticker"], r["opportunity_score"], ret))
             # nothing passed the agent's filters -> stays in cash for the period
-            result.period_returns[name].append(sum(returns) / len(returns) if returns else 0.0)
+            gross = sum(returns) / len(returns) if returns else 0.0
+            weights = {r["ticker"]: 1 / len(picks) for r in picks}
+            turnover, cost = rebalance_cost(holdings[name], weights, cost_bps)
+            holdings[name] = weights
+            result.turnover[name].append(turnover)
+            result.costs[name].append(cost)
+            result.period_returns[name].append(gross - cost)
     result.period_ends = [
         result.timestamps[i + 1] if i + 1 < len(result.timestamps) else _next_month_end(ts)
         for i, ts in enumerate(result.timestamps)

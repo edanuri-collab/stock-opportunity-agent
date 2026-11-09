@@ -20,7 +20,8 @@ def render(ctx: DashboardContext) -> None:
     exp = ctx.exp
     page_header(ctx, "דירוג סוכנים",
                 f"מדורג לפי {he.RANK_KEYS.get(exp.results['rank_by'])}. האלפא שנתית ומחושבת "
-                "מול פרוקסי השוק. סטטוס מובהק דורש ⁦|t| ≥ 2⁩.")
+                f"מול פרוקסי השוק, אחרי עלויות מסחר של {exp.parameters.get('cost_bps', 0):g} "
+                "נקודות בסיס לצד. סטטוס מובהק דורש p מתוקן (Holm) מתחת ל-0.05.")
     df = an.agent_leaderboard(exp)
     view = he.frame(df.assign(Family=df["Family"].map(he.FAMILIES)), ["Type", "Status"])
     c = he.col
@@ -29,7 +30,8 @@ def render(ctx: DashboardContext) -> None:
                        c("Alpha"): "{:+.1%}", c("Alpha t-stat"): "{:.2f}",
                        c("Win Rate"): "{:.1%}", c("Sharpe"): "{:.2f}",
                        c("Max Drawdown"): "{:.1%}", c("Total Return"): "{:+.1%}",
-                       c("Beats Random"): "{:.0%}"}, na_rep="-")
+                       c("Beats Random"): "{:.0%}", c("Adjusted p"): "{:.3f}",
+                       c("Turnover"): "{:.0%}", c("Cost"): "{:.1%}"}, na_rep="-")
               .map(_status_style, subset=[c("Status")])
               .map(lambda x: f"color: {theme.tone(x)}", subset=[c("Alpha"), c("Total Return")])
               .map(lambda x: f"color: {theme.MUTED}" if x == he.v("Control") else "",
@@ -74,8 +76,11 @@ def render(ctx: DashboardContext) -> None:
             "המניות. ריק עבור הסוכן האקראי, כי הציון שלו הוא רעש.\n"
             "- **אלפא**: החותך ברגרסיה מול פרוקסי השוק, בחישוב שנתי. זו התשואה שהסוכן השיג "
             "מעבר לחשיפה שלו לשוק.\n"
-            "- **סטטוס**: *עדיף על השוק* או *נחות מהשוק* רק כאשר ⁦|t| ≥ 2⁩. אחרת *לא מובהק*, "
-            "כלומר לא ניתן להבדיל ממזל.\n"
+            "- **סטטוס ו-p מתוקן**: כשבודקים עשרות סוכנים, חלק ייראו מובהקים במזל. תיקון Holm "
+            "מעלה את רף המובהקות בהתאם למספר הסוכנים, ורק p מתוקן מתחת ל-0.05 מסומן *עדיף* "
+            "או *נחות מהשוק*.\n"
+            "- **מחזור תיק ועלויות**: איזה חלק מהתיק מוחלף בחודש ממוצע, וכמה עלו העמלות "
+            "וההחלקה לאורך כל התקופה (כבר מנוכה מהתשואה).\n"
             "- **עוקף תיקים אקראיים**: אחוז תיקי ה-Top-N האקראיים (מדד הבחירה האקראית) שהשיגו "
             "תשואה כוללת נמוכה יותר.\n"
             "- **Random Agent** הוא סוכן ביקורת (פלסבו) שעובד באותו מנגנון בדיוק כמו "

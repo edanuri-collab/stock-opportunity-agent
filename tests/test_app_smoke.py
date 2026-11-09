@@ -59,3 +59,13 @@ def test_agent_builder_previews_and_saves(small_env, tmp_path, monkeypatch):
     at.button(key="b_0_save").click().run()
     assert not at.exception
     assert (tmp_path / "custom" / "smoke-agent.toml").exists()
+
+
+def test_fair_ranking_runs_from_the_ui(small_env):
+    at = AppTest.from_file(str(APP), default_timeout=120).run()
+    at.sidebar.radio(key="page").set_value("Fair Ranking").run()
+    at.slider(key="mc_seeds").set_value(5).run()
+    at.button(key="mc_run").click().run()
+    assert not at.exception
+    assert any("יתרון עמיד" in str(h.proto) for h in at.get("html"))
+    assert len(at.dataframe) >= 1

@@ -36,7 +36,8 @@ def render(ctx: DashboardContext) -> None:
     p = st.columns(5)
     n = s["strategy_agents"]
     p[0].html(theme.card("אלפא חיובית", f"{s['beat_market']} / {n}", "אסטרטגיות מול השוק"))
-    p[1].html(theme.card("אלפא מובהקת", f"{s['significant']} / {n}", "t-stat ≥ 2",
+    p[1].html(theme.card("אלפא מובהקת", f"{s['significant']} / {n}",
+                         f"אחרי תיקון לריבוי בדיקות ({s['significant_raw']} לפני תיקון)",
                          theme.POSITIVE if s["significant"] else theme.NEUTRAL))
     p[2].html(theme.card("עקפו את הסוכן האקראי", f"{s['beat_random_agent']} / {n}",
                          "תשואה כוללת מול פלסבו"))
@@ -46,8 +47,8 @@ def render(ctx: DashboardContext) -> None:
                          f"פרוקסי סינתטי משוקלל שווי, {status.periods} חודשים",
                          theme.tone(s["market_return"])))
     if s["significant"] == 0:
-        st.caption("אף אסטרטגיה לא עוברת את רף ⁦|t| ≥ 2⁩ בריצה הזו, ולכן אי אפשר להבדיל אף "
-                   "אחת מהן ממזל. זו הקריאה הכנה למדגם סינתטי קצר.")
+        st.caption("אחרי תיקון לריבוי בדיקות, אף אסטרטגיה לא מובהקת בריצה הזו. כדי לדעת מי "
+                   "באמת טובה צריך הרבה עולמות: מסך 'דירוג הוגן'.")
 
     right, left = st.columns([1.35, 1])
     with right:
@@ -67,6 +68,7 @@ def render(ctx: DashboardContext) -> None:
         st.caption("3 האסטרטגיות המובילות, הסוכן האקראי (מקווקו) ופרוקסי השוק (מנוקד).")
     with left:
         st.markdown(f"#### ההזדמנויות המובילות, {fmt_date(ctx.latest)}")
+        st.caption("ציון = אחוזון ממוצע של המניה אצל כל סוכני האסטרטגיה (ציונים מנורמלים).")
         opp = an.opportunities_frame(exp, ctx.latest, ctx.scores).head(10)
         view = he.frame(opp[["Ticker", "Company", "Opportunity Score", "Top Agent",
                              "Picked By"]])

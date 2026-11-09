@@ -19,6 +19,7 @@ PAGES = {
     "Stock Opportunities": "הזדמנויות במניות",
     "Stock Detail": "פרטי מניה",
     "Performance & Backtesting": "ביצועים ובקטסט",
+    "Fair Ranking": "דירוג הוגן",
     "Experiments": "ניסויים",
 }
 
@@ -33,7 +34,11 @@ COLUMNS = {
     "Alpha (vs market)": "אלפא (מול השוק)", "Beta": "בטא",
     "Benchmark": "מדד ייחוס", "Benchmark Return": "תשואת מדד הייחוס",
     "Excess CAGR": "CAGR עודף", "Beats Random Portfolios": "עוקף תיקים אקראיים",
-    "Verdict": "מסקנה",
+    "Verdict": "מסקנה", "Adjusted p": "p מתוקן (Holm)", "Turnover": "מחזור תיק חודשי",
+    "Cost": "עלויות מסחר מצטברות", "Mean Alpha": "אלפא ממוצעת", "SD Alpha": "סטיית תקן",
+    "Seeds Positive": "עולמות עם אלפא חיובית", "Beats Random Agent": "מנצח את הסוכן האקראי",
+    "Mean Rank": "דירוג ממוצע", "Alpha In": "אלפא חצי ראשון", "Alpha Out": "אלפא חצי שני",
+    "Raw p": "p לא מתוקן",
     # opportunities
     "Ticker": "טיקר", "Company": "חברה", "Sector": "סקטור", "Price": "מחיר",
     "Market Cap": "שווי שוק", "Value Score": "ציון ערך", "Catalyst Score": "ציון קטליזטור",
@@ -59,6 +64,7 @@ VALUES = {
     "Not distinguishable from luck": "לא ניתן להבדיל ממזל",
     "Significantly worse than benchmark": "גרוע מובהקות מהמדד",
     "Weak": "חלש", "Null": "אפס (ללא סיגנל)",
+    "Robust edge": "יתרון עמיד", "Robustly worse": "חלש באופן עקבי",
     MARKET: "מדד השוק", BUY_HOLD: "קנה והחזק", RANDOM: "בחירה אקראית",
     # sectors and industries of the synthetic universe
     "Technology": "טכנולוגיה", "Healthcare": "בריאות", "Financials": "פיננסים",

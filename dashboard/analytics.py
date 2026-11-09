@@ -20,6 +20,7 @@ from dashboard import i18n as he
 from dashboard.i18n import FACTORS as FACTOR_HE
 from engine.backtest import decide, run_backtest
 from engine.evaluation import compute_agent_metrics
+from engine.stats import SIGNIFICANCE, holm
 from data.models import StockSnapshot
 from data.sample_data import SIGNAL_KEYS
 from engine.benchmarks import BUY_HOLD, MARKET, RANDOM
@@ -50,8 +51,21 @@ def strategy_agents(exp: Experiment) -> List[str]:
     return [a for a in exp.backtest.period_returns if not is_control(a)]
 
 
+def adjusted_pvalues(exp: Experiment) -> Dict[str, float]:
+    """Holm-corrected p-values of alpha vs the market, across every non-control agent:
+    with dozens of agents, some raw |t| > 2 results are expected by luck alone."""
+    return holm({m.agent: m.alpha[MARKET].p_value for m in exp.metrics
+                 if not is_control(m.agent)})
+
+
+def corrected_status(t_stat: float, p_adjusted: Optional[float]) -> str:
+    if p_adjusted is not None and p_adjusted < SIGNIFICANCE:
+        return "Outperforming" if t_stat > 0 else "Underperforming"
+    return "Inconclusive"
+
+
 def performance_status(t_stat: float) -> str:
-    """Short status label for an agent's alpha vs the market."""
+    """Short status label for an agent's alpha vs the market (uncorrected |t| >= 2)."""
     if t_stat >= ALPHA_SIGNIFICANT_T:
         return "Outperforming"
     if t_stat <= -ALPHA_SIGNIFICANT_T:
@@ -124,8 +138,11 @@ def overview_stats(exp: Experiment) -> Dict[str, Any]:
         "best_alpha": best.alpha[MARKET].alpha,
         "best_t": best.alpha[MARKET].t_stat,
         "beat_market": sum(1 for m in strategies if m.alpha[MARKET].alpha > 0),
-        "significant": sum(1 for m in strategies
-                           if m.alpha[MARKET].t_stat >= ALPHA_SIGNIFICANT_T),
+        "significant_raw": sum(1 for m in strategies
+                               if m.alpha[MARKET].t_stat >= ALPHA_SIGNIFICANT_T),
+        "significant": sum(1 for m in strategies if m.alpha[MARKET].t_stat > 0
+                           and adjusted_pvalues(exp).get(m.agent, 1.0) < SIGNIFICANCE),
+        "cost_bps": exp.parameters.get("cost_bps", 0.0),
         "beat_random_agent": (sum(1 for m in strategies if m.total_return > control.total_return)
                               if control else None),
         "market_return": exp.results["benchmarks"][MARKET]["total_return"],
@@ -139,6 +156,7 @@ def overview_stats(exp: Experiment) -> Dict[str, Any]:
 
 def agent_leaderboard(exp: Experiment) -> pd.DataFrame:
     agents = _agent_map(exp)
+    adjusted = adjusted_pvalues(exp)
     rows = []
     for rank, m in enumerate(exp.metrics, start=1):
         a = m.alpha[MARKET]
@@ -146,13 +164,15 @@ def agent_leaderboard(exp: Experiment) -> pd.DataFrame:
         rows.append({
             "Rank": rank, "Agent": m.agent, "Type": "Control" if control else "Strategy",
             "Family": getattr(agents.get(m.agent), "family", ""),
-            "Status": performance_status(a.t_stat),
+            "Status": corrected_status(a.t_stat, adjusted.get(m.agent)),
+            "Adjusted p": adjusted.get(m.agent),
             # a placebo's "score" is hash noise, so it is not shown as an opportunity score
             "Opportunity Score": None if control else m.average_score,
             "Alpha": a.alpha, "Alpha t-stat": a.t_stat,
             "Win Rate": m.win_rate, "Sharpe": m.sharpe, "Max Drawdown": m.max_drawdown,
             "Trades": m.num_trades, "Total Return": m.total_return,
             "Beats Random": m.percentile_vs_random,
+            "Turnover": m.turnover, "Cost": m.total_cost,
         })
     return pd.DataFrame(rows)
 
@@ -171,11 +191,20 @@ def scores_frame(exp: Experiment) -> pd.DataFrame:
 
 def opportunities_frame(exp: Experiment, timestamp: datetime,
                         scores: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-    """One row per stock at ``timestamp``: factor scores, best strategy-agent score, picks."""
+    """One row per stock at ``timestamp``.
+
+    Raw scores of different agents are not comparable (a ranking agent always gives its best
+    stock 100), so each agent's scores are first turned into percentiles within that agent
+    (filtered-out stocks count as 0). Opportunity Score = average percentile across strategy
+    agents; Top Agent = the agent that ranks the stock highest.
+    """
     scores = scores if scores is not None else scores_frame(exp)
     at = scores[(scores["timestamp"] == timestamp.isoformat())
-                & ~scores["agent"].isin(_not_voting(exp))]
-    best = (at.sort_values(["opportunity_score", "agent"], ascending=[False, True])
+                & ~scores["agent"].isin(_not_voting(exp))].copy()
+    at["pct"] = at.groupby("agent")["opportunity_score"].rank(pct=True) * 100
+    at.loc[~at["eligible"].astype(bool), "pct"] = 0.0
+    mean_pct = at.groupby("ticker")["pct"].mean()
+    best = (at.sort_values(["pct", "opportunity_score", "agent"], ascending=[False, False, True])
               .drop_duplicates("ticker").set_index("ticker"))
     picks = picks_at(exp, timestamp)
     rows = []
@@ -187,7 +216,7 @@ def opportunities_frame(exp: Experiment, timestamp: datetime,
             "Price": s.price, "Market Cap": s.market_cap,
             "Value Score": b["value_score"], "Catalyst Score": b["catalyst_score"],
             "Momentum Score": b["momentum_score"], "Risk Score": b["risk_score"],
-            "Opportunity Score": b["opportunity_score"], "Top Agent": b["agent"],
+            "Opportunity Score": round(float(mean_pct[s.ticker]), 2), "Top Agent": b["agent"],
             "Picked By": len(agents), "Agents": ", ".join(agents),
         })
     df = pd.DataFrame(rows, columns=OPPORTUNITY_COLUMNS)

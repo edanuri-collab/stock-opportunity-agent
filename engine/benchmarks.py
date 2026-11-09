@@ -61,27 +61,36 @@ def buy_and_hold_returns(dataset: MarketDataset) -> List[float]:
 
 
 def random_selection(
-    dataset: MarketDataset, top_n: int, seed: int, trials: int
+    dataset: MarketDataset, top_n: int, seed: int, trials: int, cost_bps: float = 0.0
 ) -> tuple[List[float], List[float]]:
+    """Random portfolios pay the same trading costs as the agents (a fair comparison)."""
     if trials < 1:
         raise ValueError("trials must be >= 1")
     rng = random.Random(seed * 1_000_003 + 17)
     tickers = list(dataset.tickers)
     k = min(top_n, len(tickers))
     per_trial: List[List[float]] = [[] for _ in range(trials)]
+    held: List[set] = [set() for _ in range(trials)]
     for ts in dataset.timestamps:
-        for trial in per_trial:
+        for i, trial in enumerate(per_trial):
             picks = rng.sample(tickers, k)
-            trial.append(sum(dataset.outcome(t, ts) for t in picks) / k)
+            # equal weights: traded share = 2 x (share of names replaced)
+            changed = k - len(held[i] & set(picks)) if held[i] else k
+            traded = (2 * changed / k) if held[i] else 1.0
+            held[i] = set(picks)
+            trial.append(sum(dataset.outcome(t, ts) for t in picks) / k
+                         - traded * cost_bps / 10_000)
     mean_series = [sum(trial[i] for trial in per_trial) / trials
                    for i in range(len(dataset.timestamps))]
     return mean_series, [_compound(trial) for trial in per_trial]
 
 
 def compute_benchmarks(
-    dataset: MarketDataset, top_n: int, seed: int, random_trials: int = 200
+    dataset: MarketDataset, top_n: int, seed: int, random_trials: int = 200,
+    cost_bps: float = 0.0,
 ) -> BenchmarkSet:
-    random_series, totals = random_selection(dataset, top_n, seed, random_trials)
+    """Market and Buy & Hold barely trade, so they are modelled without costs."""
+    random_series, totals = random_selection(dataset, top_n, seed, random_trials, cost_bps)
     return BenchmarkSet(
         returns={
             MARKET: market_returns(dataset),

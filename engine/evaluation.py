@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from engine.backtest import BacktestResult
 from engine.benchmarks import MARKET, BenchmarkSet
+from engine.stats import t_pvalue
 
 PERIODS_PER_YEAR = 12
 
@@ -100,6 +101,7 @@ class AlphaStats:
     beta: float
     t_stat: float       # t-statistic of the intercept; |t| < 2 is hard to tell from luck
     excess_cagr: float  # CAGR(agent) - CAGR(benchmark)
+    p_value: float = 1.0  # two-sided, Student-t with n-2 degrees of freedom
 
 
 def alpha_stats(
@@ -121,7 +123,9 @@ def alpha_stats(
     sse = sum((y - a - beta * x) ** 2 for x, y in zip(bench, agent))
     s2 = sse / (n - 2)
     se_a = math.sqrt(s2 * (1 / n + mx ** 2 / sxx))
-    return AlphaStats(a * periods_per_year, beta, a / se_a if se_a > 0 else 0.0, excess)
+    t = a / se_a if se_a > 0 else 0.0
+    return AlphaStats(a * periods_per_year, beta, t, excess, t_pvalue(t, n - 2) if se_a > 0
+                      else 1.0)
 
 
 # ---- aggregation -----------------------------------------------------------------------------
@@ -142,6 +146,8 @@ class AgentMetrics:
     average_score: float
     percentile_vs_random: float          # share of random portfolios beaten (0-1)
     alpha: Dict[str, AlphaStats] = field(default_factory=dict)  # per benchmark name
+    turnover: float = 0.0                # average one-way turnover per period
+    total_cost: float = 0.0              # sum of per-period costs (return drag)
 
     def to_dict(self) -> Dict[str, object]:
         data = asdict(self)
@@ -149,6 +155,10 @@ class AgentMetrics:
 
 
 RANK_KEYS = ("alpha", "sharpe", "total_return", "cagr", "expectancy")
+
+
+def _mean(values: Sequence[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
 
 
 def _rank_value(m: AgentMetrics, rank_by: str) -> float:
@@ -184,6 +194,8 @@ def compute_agent_metrics(
             average_score=sum(scores) / len(scores) if scores else 0.0,
             percentile_vs_random=benchmarks.percentile_of(total),
             alpha={name: alpha_stats(series, bench) for name, bench in benchmarks.returns.items()},
+            turnover=_mean(result.turnover.get(agent, [])),
+            total_cost=sum(result.costs.get(agent, [])),
         ))
     out.sort(key=lambda m: (-_rank_value(m, rank_by), m.agent))
     return out

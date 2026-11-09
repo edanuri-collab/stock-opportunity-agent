@@ -3,16 +3,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 
 from agents.registry import Registry
 from dashboard import analytics as an
-from engine.experiment import Experiment
+from engine.experiment import Experiment, ExperimentParams
 
 PAGES = ("Overview", "Agents Leaderboard", "Agent Catalog", "Stock Opportunities",
-         "Stock Detail", "Performance & Backtesting", "Experiments")
+         "Stock Detail", "Performance & Backtesting", "Fair Ranking", "Experiments")
 
 
 @dataclass
@@ -23,6 +23,8 @@ class DashboardContext:
     experiment_dir: str
     registry: Registry
     runtime_seconds: float = 0.0
+    params: Optional[ExperimentParams] = None
+    agents_version: str = ""
 
     @property
     def timestamps(self) -> List[datetime]:
