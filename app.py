@@ -16,8 +16,8 @@ from dashboard import i18n as he
 from dashboard import theme
 from dashboard.context import PAGES, DashboardContext, build_context
 from dashboard.views import (
-    catalog, experiments, fmt_date, leaderboard, opportunities, overview, performance,
-    robustness, stock_detail,
+    catalog, experiments, fmt_date, journal, leaderboard, opportunities, overview,
+    performance, robustness, stock_detail,
 )
 from data.sample_data import SignalConfig
 from engine.evaluation import RANK_KEYS
@@ -31,6 +31,7 @@ VIEWS = {
     "Overview": overview, "Agents Leaderboard": leaderboard, "Agent Catalog": catalog,
     "Stock Opportunities": opportunities, "Stock Detail": stock_detail,
     "Performance & Backtesting": performance, "Fair Ranking": robustness,
+    "Tracking Journal": journal,
     "Experiments": experiments,
 }
 ICONS = {"Overview": ":material/dashboard:", "Agents Leaderboard": ":material/leaderboard:",
@@ -39,6 +40,7 @@ ICONS = {"Overview": ":material/dashboard:", "Agents Leaderboard": ":material/le
          "Stock Detail": ":material/query_stats:",
          "Performance & Backtesting": ":material/show_chart:",
          "Fair Ranking": ":material/balance:",
+         "Tracking Journal": ":material/menu_book:",
          "Experiments": ":material/science:"}
 
 
@@ -92,6 +94,7 @@ params = ExperimentParams(
 agents_version = fingerprint()
 ctx = load(params, defaults.experiment_dir, agents_version)
 ctx.params, ctx.agents_version = params, agents_version
+ctx.journal_path = defaults.journal_path
 
 with st.sidebar:
     status = ctx.status

@@ -13,7 +13,8 @@ APP = Path(__file__).resolve().parent.parent / "app.py"
 @pytest.fixture
 def small_env(tmp_path, monkeypatch):
     for key, value in {"SOA_N_STOCKS": "40", "SOA_N_PERIODS": "8", "SOA_RANDOM_TRIALS": "20",
-                       "SOA_EXPERIMENT_DIR": str(tmp_path)}.items():
+                       "SOA_EXPERIMENT_DIR": str(tmp_path),
+                       "SOA_JOURNAL_PATH": str(tmp_path / "journal.db")}.items():
         monkeypatch.setenv(key, value)
     return tmp_path
 
@@ -69,3 +70,15 @@ def test_fair_ranking_runs_from_the_ui(small_env):
     assert not at.exception
     assert any("יתרון עמיד" in str(h.proto) for h in at.get("html"))
     assert len(at.dataframe) >= 1
+
+
+def test_tracking_journal_replay_from_the_ui(small_env):
+    at = AppTest.from_file(str(APP), default_timeout=120).run()
+    at.sidebar.radio(key="page").set_value("Tracking Journal").run()
+    assert not at.exception
+    at.button(key="j_replay").click().run()
+    assert not at.exception
+    assert (small_env / "journal.db").exists()
+    assert len(at.dataframe) >= 2  # performance table + recent entries
+    at.button(key="j_record").click().run()  # already recorded: adds nothing, no error
+    assert not at.exception and any("כבר היו ביומן" in s.value for s in at.success)

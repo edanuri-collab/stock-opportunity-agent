@@ -125,6 +125,29 @@ than N stocks pass an agent's filters it holds fewer picks, and none means cash 
 All of this runs on synthetic data, where every strategy concept has the same weak positive
 loading by design: it validates the method, it does not tell which strategy works in real markets.
 
+## Tracking journal (`engine/journal.py`, dashboard screen "Tracking Journal")
+
+A SQLite log (`journal/journal.db`, `SOA_JOURNAL_PATH`, git-ignored) of every agent's top-N picks
+per date. No orders are ever placed.
+
+- **Locked**: database triggers reject any change to a recorded decision and any delete;
+  recording the same (source, dataset version, date, agent, agent version) twice adds nothing.
+- **Point-in-time**: a decision at T uses only the provider's snapshots of T.
+- **Resolved later**: once a later date exists, each entry gets the equal-weight price return of
+  its picks to that date, and every period stores the equal-weight universe return as the
+  benchmark (price-based, before costs and dividends).
+- **Forward vs replay**: entries recorded within a few days of T are *forward* (genuine
+  out-of-sample tracking); later ones are *replay*. With synthetic data everything is replay.
+- **Any provider**: the journal only needs `name`, `version`, `timestamps()` and
+  `snapshots_at()` (`interfaces.MarketDataProvider`); `data/providers.py` has the synthetic one.
+
+```bash
+python -m engine.journal replay    # record every date of the current dataset, then resolve
+python -m engine.journal record    # record the latest date only (e.g. a monthly scheduled task)
+python -m engine.journal resolve
+python -m engine.journal report
+```
+
 ## Synthetic data: signal is separate from outcome
 
 Each month, features at time T are noisy observations of hidden state and of the price path up to T.

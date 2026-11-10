@@ -12,7 +12,8 @@ from dashboard import analytics as an
 from engine.experiment import Experiment, ExperimentParams
 
 PAGES = ("Overview", "Agents Leaderboard", "Agent Catalog", "Stock Opportunities",
-         "Stock Detail", "Performance & Backtesting", "Fair Ranking", "Experiments")
+         "Stock Detail", "Performance & Backtesting", "Fair Ranking", "Tracking Journal",
+         "Experiments")
 
 
 @dataclass
@@ -25,6 +26,7 @@ class DashboardContext:
     runtime_seconds: float = 0.0
     params: Optional[ExperimentParams] = None
     agents_version: str = ""
+    journal_path: str = "journal/journal.db"
 
     @property
     def timestamps(self) -> List[datetime]:

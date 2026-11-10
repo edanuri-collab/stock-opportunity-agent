@@ -24,6 +24,7 @@ class Settings:
     random_trials: int = 200
     cost_bps: int = 10
     experiment_dir: str = "experiments"
+    journal_path: str = "journal/journal.db"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -36,4 +37,5 @@ class Settings:
             random_trials=_int_from_env("SOA_RANDOM_TRIALS", d.random_trials),
             cost_bps=_int_from_env("SOA_COST_BPS", d.cost_bps),
             experiment_dir=os.environ.get("SOA_EXPERIMENT_DIR") or d.experiment_dir,
+            journal_path=os.environ.get("SOA_JOURNAL_PATH") or d.journal_path,
         )

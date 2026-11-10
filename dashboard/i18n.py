@@ -20,6 +20,7 @@ PAGES = {
     "Stock Detail": "פרטי מניה",
     "Performance & Backtesting": "ביצועים ובקטסט",
     "Fair Ranking": "דירוג הוגן",
+    "Tracking Journal": "יומן מעקב",
     "Experiments": "ניסויים",
 }
 

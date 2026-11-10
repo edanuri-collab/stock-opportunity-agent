@@ -1,4 +1,4 @@
-"""Extension points for future phases. Interfaces only - nothing here is implemented yet.
+"""Extension points for future phases. Interfaces only (see data/providers.py for the first).
 
 Every provider must be point-in-time: it may only return information that was
 publicly known at or before the requested timestamp (no look-ahead).
@@ -12,7 +12,14 @@ from data.models import StockSnapshot
 
 
 class MarketDataProvider(Protocol):
-    """Market data, SEC filings, news, social media, fundamentals (one adapter each)."""
+    """Market data, SEC filings, news, social media, fundamentals (one adapter each).
+
+    ``data.providers.SyntheticProvider`` implements this today; the tracking journal
+    (``engine/journal.py``) works with any provider that does.
+    """
+
+    name: str       # e.g. "synthetic" or the vendor name
+    version: str    # dataset / feed version, part of every journal entry
 
     def timestamps(self) -> Sequence[datetime]: ...
 
